@@ -1,0 +1,5 @@
+{
+  "name": "ExtensionTo CMS",
+  "description": "A production-ready WordPress-style Content Management System for managing browser extensions, articles, and media with integrated AI drafting, SEO analysis, and automated scheduling.",
+  "requestFramePermissions": []
+}

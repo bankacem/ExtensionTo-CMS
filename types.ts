@@ -47,22 +47,6 @@ export interface MediaItem {
   uploadDate: string;
 }
 
-export interface PostIndex {
-  id: string;
-  title: string;
-  excerpt: string;
-  category: string;
-  tags: string[];
-  publishDate: string;
-  status: PostStatus;
-  wordCount: number;
-  readingTime: number;
-  seoScore: number;
-  internalLinks: string[];
-  author?: string;
-  slug: string;
-}
-
 export interface ScheduledPost {
   id: string;
   postId: string;
@@ -91,15 +75,8 @@ export interface User {
   avatar?: string;
 }
 
-export interface ReportData {
-  period: 'daily' | 'weekly' | 'monthly';
-  startDate: string;
-  endDate: string;
-  totalViews: number;
-  totalUniqueVisitors: number;
-  avgSessionDuration: number;
-  avgBounceRate: number;
-  postsPublished: number;
-  topPosts: Record<string, number>;
-  topReferrals: Record<string, number>;
+export interface GithubSyncInfo {
+  lastSync: string;
+  status: 'synced' | 'error' | 'idle';
+  sha?: string;
 }

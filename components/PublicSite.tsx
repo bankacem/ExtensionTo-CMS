@@ -11,6 +11,7 @@ type SubPage = 'home' | 'about' | 'contact' | 'privacy' | 'terms' | 'blog';
 
 export const PublicSite: React.FC<PublicSiteProps> = ({ onEnterAdmin }) => {
   const [page, setPage] = useState<SubPage>('home');
+  const [viewingPost, setViewingPost] = useState<BlogPost | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeCategory, setActiveCategory] = useState('All');
   const [extensions, setExtensions] = useState<Extension[]>([]);
@@ -25,12 +26,12 @@ export const PublicSite: React.FC<PublicSiteProps> = ({ onEnterAdmin }) => {
     setExtensions(savedExtensions ? JSON.parse(savedExtensions) : DEFAULT_EXTENSIONS);
     
     window.scrollTo(0, 0);
-  }, [page]);
+  }, [page, viewingPost]);
 
-  const handlePostClick = (postId: string) => {
-    // Real view increment logic
+  const handlePostClick = (post: BlogPost) => {
+    // Increment view count
     const updatedPosts = posts.map(p => {
-      if (p.id === postId) {
+      if (p.id === post.id) {
         return { ...p, views: (p.views || 0) + 1 };
       }
       return p;
@@ -38,9 +39,8 @@ export const PublicSite: React.FC<PublicSiteProps> = ({ onEnterAdmin }) => {
     setPosts(updatedPosts);
     localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(updatedPosts));
     
-    // In a real app, you would navigate to the post page here
-    // For this demo, we'll just show the success of tracking
-    console.log(`View tracked for post: ${postId}`);
+    // Set active viewing post
+    setViewingPost(post);
   };
 
   const categories = useMemo(() => {
@@ -67,7 +67,7 @@ export const PublicSite: React.FC<PublicSiteProps> = ({ onEnterAdmin }) => {
     <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
       <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
         <button 
-          onClick={() => setPage('home')} 
+          onClick={() => { setPage('home'); setViewingPost(null); }} 
           onDoubleClick={onEnterAdmin} 
           className="flex items-center gap-3 hover:opacity-80 transition-opacity"
           title="Admin Access: Double Click"
@@ -76,10 +76,10 @@ export const PublicSite: React.FC<PublicSiteProps> = ({ onEnterAdmin }) => {
           <span className="text-xl font-black tracking-tighter text-gray-900">ExtensionTo</span>
         </button>
         <div className="hidden md:flex items-center gap-8 text-[10px] font-black uppercase tracking-[0.2em] text-gray-400">
-          <button onClick={() => setPage('home')} className={`hover:text-indigo-600 transition-colors ${page === 'home' ? 'text-indigo-600' : ''}`}>Home</button>
-          <button onClick={() => setPage('blog')} className={`hover:text-indigo-600 transition-colors ${page === 'blog' ? 'text-indigo-600' : ''}`}>Blog</button>
-          <button onClick={() => setPage('about')} className={`hover:text-indigo-600 transition-colors ${page === 'about' ? 'text-indigo-600' : ''}`}>About</button>
-          <button onClick={() => setPage('contact')} className={`hover:text-indigo-600 transition-colors ${page === 'contact' ? 'text-indigo-600' : ''}`}>Contact</button>
+          <button onClick={() => { setPage('home'); setViewingPost(null); }} className={`hover:text-indigo-600 transition-colors ${page === 'home' && !viewingPost ? 'text-indigo-600' : ''}`}>Home</button>
+          <button onClick={() => { setPage('blog'); setViewingPost(null); }} className={`hover:text-indigo-600 transition-colors ${page === 'blog' && !viewingPost ? 'text-indigo-600' : ''}`}>Blog</button>
+          <button onClick={() => { setPage('about'); setViewingPost(null); }} className={`hover:text-indigo-600 transition-colors ${page === 'about' ? 'text-indigo-600' : ''}`}>About</button>
+          <button onClick={() => { setPage('contact'); setViewingPost(null); }} className={`hover:text-indigo-600 transition-colors ${page === 'contact' ? 'text-indigo-600' : ''}`}>Contact</button>
         </div>
       </div>
     </nav>
@@ -95,17 +95,87 @@ export const PublicSite: React.FC<PublicSiteProps> = ({ onEnterAdmin }) => {
         </div>
         <div className="flex flex-wrap justify-center gap-8 text-[10px] font-black uppercase tracking-widest text-gray-400">
           <span>© 2025 ExtensionTo</span>
-          <button onClick={() => setPage('blog')} className="hover:text-indigo-600">Blog</button>
-          <button onClick={() => setPage('about')} className="hover:text-indigo-600">About Us</button>
-          <button onClick={() => setPage('contact')} className="hover:text-indigo-600">Contact</button>
-          <button onClick={() => setPage('privacy')} className="hover:text-indigo-600">Privacy Policy</button>
-          <button onClick={() => setPage('terms')} className="hover:text-indigo-600">Terms of Service</button>
+          <button onClick={() => { setPage('blog'); setViewingPost(null); }} className="hover:text-indigo-600">Blog</button>
+          <button onClick={() => { setPage('about'); setViewingPost(null); }} className="hover:text-indigo-600">About Us</button>
+          <button onClick={() => { setPage('contact'); setViewingPost(null); }} className="hover:text-indigo-600">Contact</button>
+          <button onClick={() => { setPage('privacy'); setViewingPost(null); }} className="hover:text-indigo-600">Privacy Policy</button>
+          <button onClick={() => { setPage('terms'); setViewingPost(null); }} className="hover:text-indigo-600">Terms of Service</button>
         </div>
       </div>
     </footer>
   );
 
-  // Page Content Renders
+  // Full Article Viewer
+  const renderPostDetail = (post: BlogPost) => (
+    <div className="pt-32 pb-20 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      <article className="max-w-4xl mx-auto px-6">
+        <button 
+          onClick={() => setViewingPost(null)}
+          className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-indigo-600 mb-10 hover:gap-4 transition-all"
+        >
+          ← Back to Articles
+        </button>
+
+        <header className="mb-12">
+          <div className="flex items-center gap-4 mb-6">
+            <span className="px-3 py-1 bg-indigo-600 text-white text-[10px] font-black uppercase tracking-widest rounded-full">{post.category}</span>
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">{new Date(post.publishDate).toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })}</span>
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">• {post.views || 0} Views</span>
+          </div>
+          <h1 className="text-5xl md:text-7xl font-black text-gray-900 tracking-tighter leading-[1.1] mb-8">{post.title}</h1>
+          <p className="text-xl text-gray-500 font-medium leading-relaxed italic">{post.excerpt}</p>
+        </header>
+
+        {post.image && (
+          <div className="rounded-[3rem] overflow-hidden mb-16 shadow-2xl shadow-indigo-100">
+            <img src={post.image} alt={post.title} className="w-full h-auto object-cover max-h-[500px]" />
+          </div>
+        )}
+
+        <div className="prose prose-xl prose-indigo max-w-none text-gray-800 leading-relaxed font-medium">
+          {/* Using dangerouslySetInnerHTML to render the HTML content from CMS */}
+          <div 
+            className="space-y-6"
+            dangerouslySetInnerHTML={{ __html: post.content }} 
+          />
+        </div>
+
+        <div className="mt-20 pt-10 border-t border-gray-100 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-gray-900 rounded-full flex items-center justify-center text-white font-bold">E</div>
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-gray-900">ExtensionTo Editorial</p>
+              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Verified Expert Reviewer</p>
+            </div>
+          </div>
+          <div className="flex gap-4">
+             {/* Simple Social Share placeholders */}
+             <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 hover:text-indigo-600 cursor-pointer transition-colors">𝕏</div>
+             <div className="w-10 h-10 bg-gray-50 rounded-xl flex items-center justify-center text-gray-400 hover:text-indigo-600 cursor-pointer transition-colors">f</div>
+          </div>
+        </div>
+      </article>
+
+      {/* Related Posts Section */}
+      <section className="max-w-7xl mx-auto px-6 mt-32">
+        <h3 className="text-3xl font-black tracking-tighter mb-12">More to Read.</h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          {publishedPosts.filter(p => p.id !== post.id).slice(0, 3).map(related => (
+            <div 
+              key={related.id} 
+              onClick={() => handlePostClick(related)}
+              className="group cursor-pointer bg-gray-50 p-8 rounded-[2.5rem] hover:bg-white hover:shadow-xl transition-all"
+            >
+              <span className="text-[10px] font-black uppercase text-indigo-500 block mb-4">{related.category}</span>
+              <h4 className="text-xl font-black tracking-tighter mb-4 line-clamp-2 group-hover:text-indigo-600">{related.title}</h4>
+              <p className="text-xs text-gray-500 font-medium line-clamp-2">Read insight →</p>
+            </div>
+          ))}
+        </div>
+      </section>
+    </div>
+  );
+
   const renderHome = () => (
     <div className="animate-in fade-in duration-1000">
       <section className="pt-40 pb-20 px-6 text-center">
@@ -198,13 +268,13 @@ export const PublicSite: React.FC<PublicSiteProps> = ({ onEnterAdmin }) => {
               <h2 className="text-5xl md:text-7xl font-black text-gray-900 tracking-tighter leading-none mb-4">Latest Intelligence.</h2>
               <p className="text-gray-500 font-bold uppercase tracking-widest text-xs">Directly from the ExtensionTo Newsroom</p>
             </div>
-            <button onClick={() => setPage('blog')} className="text-indigo-600 font-black uppercase tracking-widest text-xs hover:underline">View All Articles →</button>
+            <button onClick={() => { setPage('blog'); setViewingPost(null); }} className="text-indigo-600 font-black uppercase tracking-widest text-xs hover:underline">View All Articles →</button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
             {publishedPosts.slice(0, 3).map((post, idx) => (
               <div 
                 key={post.id} 
-                onClick={() => handlePostClick(post.id)}
+                onClick={() => handlePostClick(post)}
                 className={`group cursor-pointer ${idx === 0 ? 'md:col-span-2' : ''}`}
               >
                 <div className="overflow-hidden rounded-[3rem] mb-8 bg-white shadow-lg shadow-gray-200/50">
@@ -244,7 +314,7 @@ export const PublicSite: React.FC<PublicSiteProps> = ({ onEnterAdmin }) => {
           {publishedPosts.map((post) => (
             <div 
               key={post.id} 
-              onClick={() => handlePostClick(post.id)}
+              onClick={() => handlePostClick(post)}
               className="flex flex-col group cursor-pointer bg-white rounded-[3rem] overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500"
             >
               <div className="h-64 overflow-hidden relative">
@@ -393,12 +463,16 @@ export const PublicSite: React.FC<PublicSiteProps> = ({ onEnterAdmin }) => {
       {Header}
       
       <main className="min-h-[70vh]">
-        {page === 'home' && renderHome()}
-        {page === 'blog' && renderBlog()}
-        {page === 'about' && renderAbout()}
-        {page === 'contact' && renderContact()}
-        {page === 'privacy' && renderPrivacy()}
-        {page === 'terms' && renderTerms()}
+        {viewingPost ? renderPostDetail(viewingPost) : (
+          <>
+            {page === 'home' && renderHome()}
+            {page === 'blog' && renderBlog()}
+            {page === 'about' && renderAbout()}
+            {page === 'contact' && renderContact()}
+            {page === 'privacy' && renderPrivacy()}
+            {page === 'terms' && renderTerms()}
+          </>
+        )}
       </main>
 
       {Footer}

@@ -97,7 +97,7 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
         setPosts(updated);
         showNotice('System Update: A scheduled post is now LIVE!', 'success');
       }
-    }, 10000);
+    }, 5000); // Check every 5 seconds for higher precision
     return () => clearInterval(interval);
   }, [posts]);
 
@@ -118,18 +118,16 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
   const scheduledCount = useMemo(() => posts.filter(p => p.status === 'scheduled').length, [posts]);
   const topPerformers = useMemo(() => [...posts].sort((a,b) => (b.views || 0) - (a.views || 0)).slice(0, 5), [posts]);
 
-  // ====== ADVANCED COPY FEATURE (BULLETPROOF VERSION) ======
+  // ====== ADVANCED COPY FEATURE ======
   const handleCopyRichText = async () => {
     const content = formData.content || '';
     if (!content) return showNotice('No content to copy', 'error');
 
-    // Process content to add direct attributes to tables for better compatibility
     let compatibleContent = content;
     compatibleContent = compatibleContent.replace(/<table/g, '<table border="1" cellpadding="10" cellspacing="0" style="border-collapse: collapse; width: 100%; border: 1px solid #000; margin: 20px 0;"');
     compatibleContent = compatibleContent.replace(/<th/g, '<th style="background-color: #f2f2f2; font-weight: bold; border: 1px solid #000; padding: 10px;"');
     compatibleContent = compatibleContent.replace(/<td/g, '<td style="border: 1px solid #000; padding: 10px;"');
 
-    // Robust Professional CSS for Clipboard
     const fullHtml = `
       <!DOCTYPE html>
       <html lang="en">
@@ -175,7 +173,6 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
       showNotice('Ready to Paste (H1-H3 & Tables Preserved)', 'success');
       setTimeout(() => setCopyStatus('idle'), 2000);
     } catch (err) {
-      // Fallback
       const textArea = document.createElement("textarea");
       textArea.value = content;
       document.body.appendChild(textArea);
@@ -196,14 +193,21 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
   // ====== EDITORIAL ACTIONS ======
   const handleSavePost = () => {
     if (!formData.title) return showNotice('Headline is required', 'error');
+    
+    // Logic for scheduling: if scheduled, use the selected date; otherwise, default to now.
+    const finalPublishDate = formData.status === 'scheduled' 
+      ? (formData.publishDate || new Date().toISOString()) 
+      : new Date().toISOString();
+
     const newPost: BlogPost = {
       ...DEFAULT_POSTS[0],
       ...formData as BlogPost,
       id: formData.id || `post-${Date.now()}`,
-      publishDate: formData.status === 'scheduled' ? (formData.publishDate || new Date().toISOString()) : new Date().toISOString(),
+      publishDate: finalPublishDate,
       views: formData.views || 0,
       status: formData.status || 'draft'
     };
+    
     if (formData.id) {
       setPosts(posts.map(p => p.id === formData.id ? newPost : p));
     } else {
@@ -360,7 +364,7 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
                         </div>
                         <div className="truncate">
                           <h3 className="text-sm font-black dark:text-white truncate tracking-tight">{p.title}</h3>
-                          <p className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">{p.views || 0} Hits • {p.category}</p>
+                          <p className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">{p.views || 0} Hits • {p.category} • <span className={p.status === 'scheduled' ? 'text-amber-500' : 'text-slate-400'}>{p.status.toUpperCase()}</span></p>
                         </div>
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
@@ -393,17 +397,33 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className="text-[7px] font-black uppercase text-slate-400 ml-2 mb-1 block">Category</label>
-                      <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-xl outline-none font-black uppercase text-[8px] shadow-inner" placeholder="E.g. Tech" value={formData.category || ''} onChange={e => setFormData({...formData, category: e.target.value})} />
+                    <div className="space-y-3">
+                      <div>
+                        <label className="text-[7px] font-black uppercase text-slate-400 ml-2 mb-1 block">Category</label>
+                        <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-xl outline-none font-black uppercase text-[8px] shadow-inner" placeholder="E.g. Tech" value={formData.category || ''} onChange={e => setFormData({...formData, category: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className="text-[7px] font-black uppercase text-slate-400 ml-2 mb-1 block">Visibility Status</label>
+                        <select className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-xl outline-none font-black uppercase text-[8px] shadow-inner" value={formData.status || 'draft'} onChange={e => setFormData({...formData, status: e.target.value as PostStatus})}>
+                          <option value="draft">Draft</option>
+                          <option value="published">Published</option>
+                          <option value="scheduled">Scheduled</option>
+                        </select>
+                      </div>
                     </div>
                     <div>
-                      <label className="text-[7px] font-black uppercase text-slate-400 ml-2 mb-1 block">Visibility Status</label>
-                      <select className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-xl outline-none font-black uppercase text-[8px] shadow-inner" value={formData.status || 'draft'} onChange={e => setFormData({...formData, status: e.target.value as PostStatus})}>
-                        <option value="draft">Draft</option>
-                        <option value="published">Published</option>
-                        <option value="scheduled">Scheduled</option>
-                      </select>
+                      {formData.status === 'scheduled' && (
+                        <div className="animate-in slide-in-from-right-2">
+                          <label className="text-[7px] font-black uppercase text-amber-500 ml-2 mb-1 block">Target Launch Window</label>
+                          <input 
+                            type="datetime-local" 
+                            className="w-full p-3 bg-amber-50 dark:bg-amber-900/10 dark:text-amber-400 rounded-xl outline-none font-black uppercase text-[8px] shadow-inner border border-amber-100 dark:border-amber-900/50" 
+                            value={formData.publishDate ? new Date(formData.publishDate).toISOString().slice(0, 16) : ''} 
+                            onChange={e => setFormData({...formData, publishDate: new Date(e.target.value).toISOString()})} 
+                          />
+                          <p className="text-[6px] font-bold text-slate-400 uppercase mt-2 ml-2">Intelligence will sync at specified coordinates.</p>
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>

@@ -2,8 +2,14 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 export const generateDraft = async (title: string) => {
-  // Fix: Initialize GoogleGenAI using process.env.API_KEY directly as per guidelines
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  // Vite سيقوم باستبدال process.env.API_KEY بالقيمة الحقيقية أثناء البناء
+  const apiKey = process.env.API_KEY;
+  
+  if (!apiKey) {
+    throw new Error("Gemini API Key is missing. Please check your environment variables.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   const prompt = `Write a professional blog post about "${title}" for a browser extensions hub.
     Requirements:
     - HTML format (h2, p, ul, li)
@@ -29,7 +35,6 @@ export const generateDraft = async (title: string) => {
     }
   });
 
-  // Fix: Use response.text property directly to extract string output
   const text = response.text;
   if (!text) throw new Error("No response from AI");
   

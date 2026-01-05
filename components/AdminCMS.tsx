@@ -28,6 +28,8 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
 
   const [posts, setPosts] = useState<BlogPost[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.POSTS);
@@ -62,6 +64,15 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
   }, [extensions]);
 
   useEffect(() => {
+    const handleStorage = () => {
+      const savedPosts = localStorage.getItem(STORAGE_KEYS.POSTS);
+      if (savedPosts) setPosts(JSON.parse(savedPosts));
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.DARK_MODE, darkMode.toString());
     if (darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
@@ -90,11 +101,10 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
     return () => clearInterval(interval);
   }, [posts]);
 
-  // ====== REAL ANALYTICS LOGIC (No Fake Data) ======
+  // ====== ANALYTICS LOGIC ======
   const realPostAnalytics = useMemo(() => {
-    // Generate data from current posts state
     return posts
-      .slice(0, 15) // Top 15 recent posts
+      .slice(0, 15)
       .reverse()
       .map(p => ({
         name: p.title.length > 12 ? p.title.substring(0, 12) + '...' : p.title,
@@ -108,59 +118,84 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
   const scheduledCount = useMemo(() => posts.filter(p => p.status === 'scheduled').length, [posts]);
   const topPerformers = useMemo(() => [...posts].sort((a,b) => (b.views || 0) - (a.views || 0)).slice(0, 5), [posts]);
 
-  const extensionAnalytics = useMemo(() => {
-    return extensions.map(e => ({
-      name: e.name.length > 10 ? e.name.substring(0, 10) + '...' : e.name,
-      downloads: e.downloads || 0
-    }));
-  }, [extensions]);
+  // ====== ADVANCED COPY FEATURE (BULLETPROOF VERSION) ======
+  const handleCopyRichText = async () => {
+    const content = formData.content || '';
+    if (!content) return showNotice('No content to copy', 'error');
 
-  // ====== TOOLS ======
-  const exportData = () => {
-    const data = { posts, extensions, timestamp: new Date().toISOString() };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `cms-master-backup-${Date.now()}.json`;
-    link.click();
-    showNotice('Database Exported Successfully', 'success');
+    // Process content to add direct attributes to tables for better compatibility
+    let compatibleContent = content;
+    compatibleContent = compatibleContent.replace(/<table/g, '<table border="1" cellpadding="10" cellspacing="0" style="border-collapse: collapse; width: 100%; border: 1px solid #000; margin: 20px 0;"');
+    compatibleContent = compatibleContent.replace(/<th/g, '<th style="background-color: #f2f2f2; font-weight: bold; border: 1px solid #000; padding: 10px;"');
+    compatibleContent = compatibleContent.replace(/<td/g, '<td style="border: 1px solid #000; padding: 10px;"');
+
+    // Robust Professional CSS for Clipboard
+    const fullHtml = `
+      <!DOCTYPE html>
+      <html lang="en">
+      <head>
+        <meta charset="utf-8">
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; color: #333; max-width: 800px; margin: 20px auto; padding: 20px; }
+          h1 { font-size: 2.5em; color: #000; margin-bottom: 0.8em; font-weight: 800; }
+          h2 { font-size: 2em; color: #111; margin-top: 1.5em; margin-bottom: 0.6em; font-weight: 700; }
+          h3 { font-size: 1.5em; color: #222; margin-top: 1.2em; margin-bottom: 0.5em; font-weight: 700; }
+          p { margin-bottom: 1.2em; font-size: 1.1em; color: #333; }
+          ul, ol { margin-bottom: 1.2em; padding-left: 30px; }
+          li { margin-bottom: 0.6em; font-size: 1.1em; }
+          strong { font-weight: bold; }
+          em { font-style: italic; }
+          img { max-width: 100%; height: auto; border-radius: 8px; margin: 20px 0; display: block; }
+          table { width: 100%; border-collapse: collapse; margin: 25px 0; border: 1px solid #000; }
+          table th, table td { border: 1px solid #000; padding: 12px; text-align: left; }
+          table th { background-color: #f7f7f7; font-weight: bold; }
+          blockquote { border-left: 5px solid #4f46e5; padding: 15px 20px; margin: 25px 0; font-style: italic; color: #555; background: #f9f9f9; }
+          a { color: #4f46e5; text-decoration: underline; }
+        </style>
+      </head>
+      <body>
+        ${compatibleContent}
+      </body>
+      </html>
+    `;
+
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = compatibleContent;
+    const plainText = tempDiv.innerText;
+
+    try {
+      const typeHtml = 'text/html';
+      const typeText = 'text/plain';
+      const blobHtml = new Blob([fullHtml], { type: typeHtml });
+      const blobText = new Blob([plainText], { type: typeText });
+      const data = [new ClipboardItem({ [typeHtml]: blobHtml, [typeText]: blobText })];
+      
+      await navigator.clipboard.write(data);
+      setCopyStatus('copied');
+      showNotice('Ready to Paste (H1-H3 & Tables Preserved)', 'success');
+      setTimeout(() => setCopyStatus('idle'), 2000);
+    } catch (err) {
+      // Fallback
+      const textArea = document.createElement("textarea");
+      textArea.value = content;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      showNotice('HTML Copied (Clipboard API Blocked)', 'info');
+    }
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const json = JSON.parse(event.target?.result as string);
-        if (json.posts) setPosts(json.posts);
-        if (json.extensions) setExtensions(json.extensions);
-        showNotice('Data Restoration Complete', 'success');
-      } catch { showNotice('Invalid Backup File', 'error'); }
-    };
-    reader.readAsText(file);
-  };
-
-  const generateSitemap = () => {
-    const baseUrl = window.location.origin;
-    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
-    posts.filter(p => p.status === 'published').forEach(p => {
-      xml += `  <url><loc>${baseUrl}/blog/${p.id}</loc></url>\n`;
-    });
-    xml += `</urlset>`;
-    const blob = new Blob([xml], { type: 'text/xml' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = 'sitemap.xml';
-    link.click();
-    showNotice('Sitemap.xml Generated', 'success');
+  const handleCopyRawHTML = () => {
+    const html = formData.content || '';
+    if (!html) return showNotice('No content to copy', 'error');
+    navigator.clipboard.writeText(html);
+    showNotice('Raw Code Exported', 'info');
   };
 
   // ====== EDITORIAL ACTIONS ======
   const handleSavePost = () => {
-    if (!formData.title) return showNotice('Title is required', 'error');
+    if (!formData.title) return showNotice('Headline is required', 'error');
     const newPost: BlogPost = {
       ...DEFAULT_POSTS[0],
       ...formData as BlogPost,
@@ -175,11 +210,11 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
       setPosts([newPost, ...posts]);
     }
     setIsEditing(false);
-    showNotice('Publication updated in database', 'success');
+    showNotice('Intelligence Synced to Database', 'success');
   };
 
   const handleAIDraft = async () => {
-    if (!formData.title) return showNotice('Headline needed for AI generation', 'info');
+    if (!formData.title) return showNotice('Headline needed', 'info');
     setAiLoading(true);
     try {
       const draft = await generateDraft(formData.title);
@@ -195,17 +230,17 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
   if (!currentUser) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6">
-        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl p-12 border dark:border-slate-800">
-          <div className="flex justify-center mb-8"><div className="w-20 h-20 bg-indigo-600 rounded-[2rem] flex items-center justify-center text-white font-black text-4xl shadow-xl shadow-indigo-100">E</div></div>
-          <h1 className="text-2xl font-black text-center mb-8 dark:text-white uppercase tracking-tighter">BANKACEM Terminal</h1>
+        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-10 border dark:border-slate-800">
+          <div className="flex justify-center mb-8"><div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-black text-3xl">E</div></div>
+          <h1 className="text-xl font-black text-center mb-8 dark:text-white uppercase tracking-tighter">Editorial Terminal</h1>
           <form onSubmit={(e) => {
             e.preventDefault();
             const user = DEFAULT_USERS.find(u => u.username === loginForm.username && u.password === loginForm.password);
             if (user) onLogin(user); else showNotice('Unauthorized Credentials', 'error');
           }} className="space-y-4">
-            <input type="text" placeholder="Access ID" className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-bold" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} />
-            <input type="password" placeholder="Passkey" className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-bold" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} />
-            <button type="submit" className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-100">Establish Session</button>
+            <input type="text" placeholder="Access ID" className="w-full px-5 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-xl outline-none font-bold" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} />
+            <input type="password" placeholder="Passkey" className="w-full px-5 py-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-xl outline-none font-bold" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} />
+            <button type="submit" className="w-full py-3 bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg">Establish Session</button>
           </form>
         </div>
       </div>
@@ -214,75 +249,90 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
 
   return (
     <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 transition-colors duration-300 font-sans">
-      <input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden" />
+      <input type="file" ref={fileInputRef} onChange={(e) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          try {
+            const json = JSON.parse(event.target?.result as string);
+            if (json.posts) setPosts(json.posts);
+            if (json.extensions) setExtensions(json.extensions);
+            showNotice('State Restored', 'success');
+          } catch { showNotice('Invalid Source', 'error'); }
+        };
+        reader.readAsText(file);
+      }} accept=".json" className="hidden" />
 
       {/* Modern Sidebar */}
-      <aside className="w-72 fixed h-full bg-white dark:bg-slate-900 border-r dark:border-slate-800 z-50 flex flex-col p-6 shadow-sm">
-        <div className="flex items-center gap-3 mb-12 cursor-pointer group" onClick={onViewSite}>
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg shadow-indigo-100">E</div>
-          <span className="font-black text-xl tracking-tighter dark:text-white">Editorial Hub</span>
+      <aside className="w-60 fixed h-full bg-white dark:bg-slate-900 border-r dark:border-slate-800 z-50 flex flex-col p-5 shadow-sm">
+        <div className="flex items-center gap-2 mb-8 cursor-pointer group" onClick={onViewSite}>
+          <div className="w-9 h-9 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black text-lg">E</div>
+          <span className="font-black text-lg tracking-tighter dark:text-white">Editorial Hub</span>
         </div>
         
-        <nav className="flex-grow space-y-2">
+        <nav className="flex-grow space-y-1">
           {[
             { id: 'dashboard', label: 'Overview', icon: '📊' },
             { id: 'posts', label: 'Editorial', icon: '📝' },
             { id: 'scheduler', label: 'Queue', icon: '⏰' },
-            { id: 'extensions', label: 'Extensions', icon: '🧩' },
-            { id: 'analytics', label: 'Analytics', icon: '📈' },
-            { id: 'settings', label: 'Database & SEO', icon: '⚙️' }
+            { id: 'extensions', label: 'Assets', icon: '🧩' },
+            { id: 'analytics', label: 'Impact', icon: '📈' },
+            { id: 'settings', label: 'System', icon: '⚙️' }
           ].map(item => (
-            <button key={item.id} onClick={() => { setActiveTab(item.id as Tab); setIsEditing(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
-              <span className="text-lg opacity-80">{item.icon}</span> {item.label}
+            <button key={item.id} onClick={() => { setActiveTab(item.id as Tab); setIsEditing(false); }} className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl font-black text-[8px] uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-indigo-600 text-white shadow-md' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+              <span className="text-sm">{item.icon}</span> {item.label}
             </button>
           ))}
         </nav>
 
-        <div className="pt-6 border-t dark:border-slate-800 space-y-2">
-          <button onClick={() => setDarkMode(!darkMode)} className="w-full text-left px-5 py-3 text-[10px] font-black uppercase text-slate-400 hover:text-indigo-600 transition-colors">{darkMode ? '☀️ Day Mode' : '🌙 Night Mode'}</button>
-          <button onClick={onLogout} className="w-full text-left px-5 py-3 text-[10px] font-black uppercase text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-2xl">🚪 Exit Session</button>
+        <div className="pt-5 border-t dark:border-slate-800 space-y-0.5">
+          <button onClick={() => setDarkMode(!darkMode)} className="w-full text-left px-3.5 py-2 text-[8px] font-black uppercase text-slate-400 hover:text-indigo-600">{darkMode ? '☀️ Light' : '🌙 Dark'}</button>
+          <button onClick={onLogout} className="w-full text-left px-3.5 py-2 text-[8px] font-black uppercase text-rose-500 rounded-xl">🚪 Exit</button>
         </div>
       </aside>
 
-      <main className="ml-72 flex-grow p-10 overflow-y-auto min-h-screen">
+      <main className="ml-60 flex-grow p-6 overflow-y-auto min-h-screen">
         {notice && (
-          <div className={`fixed top-10 right-10 z-[100] px-8 py-5 rounded-2xl shadow-2xl text-white font-black uppercase text-[10px] animate-in fade-in slide-in-from-top-4 ${notice.type === 'success' ? 'bg-emerald-500 shadow-emerald-200' : 'bg-indigo-600 shadow-indigo-200'}`}>
+          <div className={`fixed top-6 right-6 z-[100] px-5 py-3 rounded-xl shadow-xl text-white font-black uppercase text-[8px] animate-in fade-in slide-in-from-top-2 ${notice.type === 'success' ? 'bg-emerald-500' : 'bg-indigo-600'}`}>
             {notice.message}
           </div>
         )}
 
-        {/* 1. Dashboard (REAL DATA ONLY) */}
+        {/* 1. Dashboard */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-12 animate-in fade-in duration-700">
-            <header><h1 className="text-5xl font-black dark:text-white tracking-tighter leading-tight">Platform Metrics</h1></header>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div className="space-y-8 animate-in fade-in duration-700">
+            <header className="flex justify-between items-end">
+              <div>
+                <h1 className="text-3xl font-black dark:text-white tracking-tighter">System Metrics</h1>
+                <p className="text-[8px] font-black uppercase text-indigo-500 tracking-widest mt-0.5">Live Monitoring</p>
+              </div>
+            </header>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
               {[
-                { label: 'Total Engagement', value: totalViews.toLocaleString(), color: 'text-indigo-600' },
-                { label: 'Published Content', value: activePostCount, color: 'text-emerald-500' },
-                { label: 'Scheduled Queue', value: scheduledCount, color: 'text-amber-500' },
-                { label: 'Asset Library', value: extensions.length, color: 'text-slate-900 dark:text-white' }
+                { label: 'Impressions', value: totalViews.toLocaleString(), color: 'text-indigo-600' },
+                { label: 'Live Assets', value: activePostCount, color: 'text-emerald-500' },
+                { label: 'Pending Sync', value: scheduledCount, color: 'text-amber-500' },
+                { label: 'Tools Registered', value: extensions.length, color: 'text-slate-900 dark:text-white' }
               ].map((stat, i) => (
-                <div key={i} className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-sm border dark:border-slate-800">
-                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</span>
-                  <div className={`text-4xl font-black mt-3 ${stat.color}`}>{stat.value}</div>
+                <div key={i} className="p-5 bg-white dark:bg-slate-900 rounded-[1.5rem] shadow-sm border dark:border-slate-800">
+                  <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</span>
+                  <div className={`text-2xl font-black mt-1 ${stat.color}`}>{stat.value}</div>
                 </div>
               ))}
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border dark:border-slate-800 shadow-sm">
-              <h3 className="text-xl font-black dark:text-white mb-8 tracking-tighter">Historical View Trends (Real Data)</h3>
-              <div className="h-96">
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-sm">
+              <h3 className="text-base font-black dark:text-white mb-5 tracking-tighter">Engagement Spectrum</h3>
+              <div className="h-64">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={realPostAnalytics}>
                     <defs><linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/><stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/></linearGradient></defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? '#1e293b' : '#f1f5f9'} />
-                    <XAxis dataKey="name" stroke={darkMode ? '#475569' : '#94a3b8'} fontSize={10} fontWeight={900} />
+                    <XAxis dataKey="name" stroke="#94a3b8" fontSize={8} fontWeight={900} />
                     <YAxis hide />
-                    <Tooltip 
-                      contentStyle={{borderRadius: '20px', border:'none', fontWeight:'900', background: darkMode ? '#0f172a' : '#fff', color: darkMode ? '#fff' : '#000'}} 
-                      itemStyle={{color: '#4f46e5'}}
-                    />
-                    <Area type="monotone" dataKey="views" stroke="#4f46e5" fillOpacity={1} fill="url(#colorViews)" strokeWidth={6} />
+                    <Tooltip contentStyle={{borderRadius: '12px', border:'none', fontSize: '9px', fontWeight: '900'}} />
+                    <Area type="monotone" dataKey="views" stroke="#4f46e5" fillOpacity={1} fill="url(#colorViews)" strokeWidth={3} />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
@@ -292,322 +342,253 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
 
         {/* 2. Editorial Board */}
         {activeTab === 'posts' && (
-          <div className="space-y-8 animate-in fade-in duration-500">
+          <div className="space-y-6 animate-in fade-in duration-500">
             <header className="flex justify-between items-center">
-              <h2 className="text-4xl font-black dark:text-white tracking-tighter">Editorial Board</h2>
-              {!isEditing && <button onClick={() => { setFormData({ status: 'draft', category: 'Productivity' }); setIsEditing(true); }} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl hover:scale-105 transition-all">+ Compose Article</button>}
+              <h2 className="text-2xl font-black dark:text-white tracking-tighter">Knowledge Base</h2>
+              {!isEditing && <button onClick={() => { setFormData({ status: 'draft', category: 'General' }); setIsEditing(true); }} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg font-black uppercase text-[8px] shadow-sm">+ Compose Intel</button>}
             </header>
 
             {!isEditing ? (
-              <div className="space-y-6">
-                <input type="text" placeholder="Search insights database..." className="w-full p-6 bg-white dark:bg-slate-900 rounded-[2rem] outline-none border dark:border-slate-800 font-bold dark:text-white shadow-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
-                <div className="grid gap-6">
+              <div className="space-y-3">
+                <input type="text" placeholder="Filter insights..." className="w-full p-3 bg-white dark:bg-slate-900 rounded-xl outline-none border dark:border-slate-800 font-bold text-xs" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                <div className="grid gap-3">
                   {filteredPosts.map(p => (
-                    <div key={p.id} className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border dark:border-slate-800 flex items-center justify-between group hover:border-indigo-200 transition-all shadow-sm">
-                      <div className="flex items-center gap-8">
-                        <div className="w-20 h-20 rounded-3xl bg-slate-100 dark:bg-slate-800 overflow-hidden shadow-inner flex items-center justify-center">
-                          {p.image ? <img src={p.image} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" alt="" /> : <span className="text-2xl opacity-20">🖼️</span>}
+                    <div key={p.id} className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800 flex items-center justify-between group hover:border-indigo-100 transition-all shadow-sm">
+                      <div className="flex items-center gap-4 truncate">
+                        <div className="w-10 h-10 rounded-lg bg-slate-50 dark:bg-slate-800 overflow-hidden flex items-center justify-center shadow-inner">
+                          {p.image ? <img src={p.image} className="w-full h-full object-cover" alt="" /> : <span className="text-base opacity-20">🖼️</span>}
                         </div>
-                        <div>
-                          <div className="flex items-center gap-3">
-                            <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full ${p.status === 'published' ? 'bg-emerald-50 text-emerald-600' : p.status === 'scheduled' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>{p.status}</span>
-                            <span className="text-[9px] font-black uppercase text-slate-400 tracking-widest">{p.category}</span>
-                          </div>
-                          <h3 className="text-xl font-black dark:text-white mt-1 leading-tight tracking-tight">{p.title}</h3>
-                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">{p.views || 0} Real Views • Published: {new Date(p.publishDate).toLocaleDateString()}</p>
+                        <div className="truncate">
+                          <h3 className="text-sm font-black dark:text-white truncate tracking-tight">{p.title}</h3>
+                          <p className="text-[7px] font-bold text-slate-400 uppercase tracking-widest">{p.views || 0} Hits • {p.category}</p>
                         </div>
                       </div>
-                      <div className="flex gap-3">
-                        <button onClick={() => { setFormData(p); setIsEditing(true); }} className="w-14 h-14 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl flex items-center justify-center text-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm">✏️</button>
-                        <button onClick={() => { if(confirm('Permanently delete asset?')) setPosts(posts.filter(x => x.id !== p.id)); }} className="w-14 h-14 bg-slate-50 dark:bg-slate-800 dark:text-rose-500 rounded-2xl flex items-center justify-center text-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm">🗑️</button>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button onClick={() => { setFormData(p); setIsEditing(true); }} className="w-7 h-7 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-md flex items-center justify-center text-xs hover:bg-indigo-600 hover:text-white transition-all shadow-sm">✏️</button>
+                        <button onClick={() => { if(confirm('Delete permanently?')) setPosts(posts.filter(x => x.id !== p.id)); }} className="w-7 h-7 bg-slate-50 dark:bg-slate-800 dark:text-rose-500 rounded-md flex items-center justify-center text-xs hover:bg-rose-500 hover:text-white transition-all shadow-sm">🗑️</button>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
             ) : (
-              <div className="bg-white dark:bg-slate-900 p-12 rounded-[4rem] border dark:border-slate-800 space-y-12 shadow-2xl animate-in slide-in-from-bottom-10">
-                <div className="flex justify-between items-center pb-8 border-b dark:border-slate-800">
-                  <h3 className="text-3xl font-black dark:text-white tracking-tighter">Composition Interface</h3>
-                  <div className="flex gap-4">
-                    <button onClick={handleAIDraft} disabled={aiLoading} className="px-6 py-3 bg-violet-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg disabled:opacity-50">{aiLoading ? 'Synthesizing...' : '🪄 AI Content Assistant'}</button>
-                    <button onClick={() => setIsEditing(false)} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-xl font-black text-[10px] uppercase tracking-widest">Discard</button>
+              <div className="bg-white dark:bg-slate-900 p-8 rounded-[2rem] border dark:border-slate-800 space-y-8 animate-in slide-in-from-bottom-5 shadow-2xl">
+                <div className="flex justify-between items-center pb-4 border-b dark:border-slate-800">
+                  <h3 className="text-xl font-black dark:text-white tracking-tighter">Composition Hub</h3>
+                  <div className="flex gap-1.5">
+                    <button onClick={handleAIDraft} disabled={aiLoading} className="px-3 py-1 bg-violet-600 text-white rounded-md font-black text-[8px] uppercase">{aiLoading ? 'Synthesizing...' : '🪄 AI Assistant'}</button>
+                    <button onClick={() => setIsEditing(false)} className="px-3 py-1 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-md font-black text-[8px] uppercase">Discard</button>
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
-                  <div className="space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                  <div className="space-y-4">
                     <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Primary Headline</label>
-                      <input className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[2rem] outline-none font-black text-xl border border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="Enter article title..." value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} />
+                      <label className="text-[7px] font-black uppercase text-slate-400 ml-2 mb-1 block">Article Title</label>
+                      <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-xl outline-none font-black text-sm border focus:border-indigo-500 shadow-inner" placeholder="Headline" value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} />
                     </div>
                     <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Featured Image URL</label>
-                      <input className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[2rem] outline-none font-bold shadow-inner" placeholder="https://images.unsplash.com/..." value={formData.image || ''} onChange={e => setFormData({...formData, image: e.target.value})} />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">SEO Excerpt (Meta Description)</label>
-                      <textarea className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[2rem] outline-none font-bold h-32 leading-relaxed shadow-inner" placeholder="Short SEO summary for search engines..." value={formData.excerpt || ''} onChange={e => setFormData({...formData, excerpt: e.target.value})} />
+                      <label className="text-[7px] font-black uppercase text-slate-400 ml-2 mb-1 block">Featured Media URL</label>
+                      <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-xl outline-none font-bold text-[10px] shadow-inner" placeholder="https://..." value={formData.image || ''} onChange={e => setFormData({...formData, image: e.target.value})} />
                     </div>
                   </div>
-                  
-                  <div className="space-y-8">
-                    <div className="grid grid-cols-2 gap-6">
-                      <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Classification Category</label>
-                        <input className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-black uppercase text-xs shadow-inner" placeholder="Security, AI..." value={formData.category || ''} onChange={e => setFormData({...formData, category: e.target.value})} />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Visibility Status</label>
-                        <select className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-black uppercase text-[10px] appearance-none cursor-pointer shadow-inner" value={formData.status || 'draft'} onChange={e => setFormData({...formData, status: e.target.value as PostStatus})}>
-                          <option value="draft">Draft (Private)</option>
-                          <option value="published">Publish (Go Live)</option>
-                          <option value="scheduled">Schedule (Queue)</option>
-                        </select>
-                      </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[7px] font-black uppercase text-slate-400 ml-2 mb-1 block">Category</label>
+                      <input className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-xl outline-none font-black uppercase text-[8px] shadow-inner" placeholder="E.g. Tech" value={formData.category || ''} onChange={e => setFormData({...formData, category: e.target.value})} />
                     </div>
-                    
-                    {formData.status === 'scheduled' && (
-                      <div className="p-8 bg-amber-50 dark:bg-amber-900/10 rounded-[3rem] border border-amber-200 dark:border-amber-800 animate-in slide-in-from-top-4">
-                        <label className="text-[10px] font-black uppercase text-amber-600 mb-4 block ml-2 tracking-widest font-bold">Queue Release Timestamp (Professional Picker)</label>
-                        <div className="relative">
-                          <input 
-                            type="datetime-local" 
-                            className="w-full bg-white dark:bg-slate-800 p-6 rounded-2xl border dark:border-slate-700 outline-none font-black text-amber-900 dark:text-amber-200 cursor-pointer shadow-lg appearance-none text-center" 
-                            value={formData.publishDate ? new Date(new Date(formData.publishDate).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ""} 
-                            onChange={e => setFormData({...formData, publishDate: new Date(e.target.value).toISOString()})} 
-                          />
-                          <div className="absolute inset-y-0 right-6 flex items-center pointer-events-none text-amber-500">📅</div>
-                        </div>
+                    <div>
+                      <label className="text-[7px] font-black uppercase text-slate-400 ml-2 mb-1 block">Visibility Status</label>
+                      <select className="w-full p-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-xl outline-none font-black uppercase text-[8px] shadow-inner" value={formData.status || 'draft'} onChange={e => setFormData({...formData, status: e.target.value as PostStatus})}>
+                        <option value="draft">Draft</option>
+                        <option value="published">Published</option>
+                        <option value="scheduled">Scheduled</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-[8px] font-black uppercase text-slate-400 ml-2">Article Engine (HTML Editor)</label>
+                    <div className="flex gap-1.5">
+                       <button onClick={() => setShowPreview(!showPreview)} className="px-2.5 py-1 bg-slate-100 dark:bg-slate-800 dark:text-white text-[7px] font-black uppercase rounded-md shadow-sm">{showPreview ? 'Hide View' : 'Preview'}</button>
+                       <button onClick={handleCopyRichText} className={`px-3 py-1 ${copyStatus === 'copied' ? 'bg-emerald-500' : 'bg-indigo-600'} text-white text-[7px] font-black uppercase rounded-md shadow-md`}>
+                          {copyStatus === 'copied' ? 'Copied ✅' : 'Copy Formatted'}
+                       </button>
+                       <button onClick={handleCopyRawHTML} className="px-2.5 py-1 bg-slate-900 text-white text-[7px] font-black uppercase rounded-md shadow-sm">Copy Code</button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-4">
+                    <textarea className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-medium h-[35rem] leading-relaxed text-xs font-mono shadow-inner border focus:border-indigo-400" placeholder="Use <h1>, <h2>, <h3> and <table> tags here..." value={formData.content || ''} onChange={e => setFormData({...formData, content: e.target.value})} />
+                    {showPreview && (
+                      <div className="animate-in fade-in p-8 bg-white dark:bg-slate-900 border-2 border-indigo-50 dark:border-slate-800 rounded-2xl h-[35rem] overflow-y-auto prose dark:prose-invert max-w-none text-xs">
+                        <div className="article-preview-content" dangerouslySetInnerHTML={{ __html: formData.content || '<p class="italic opacity-30">Editor is empty...</p>' }} />
                       </div>
                     )}
-                    
-                    <div className="grid grid-cols-1 gap-6">
-                      <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">SEO Custom Title</label>
-                        <input className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-bold shadow-inner" placeholder="SEO Title Tag..." value={formData.seoTitle || ''} onChange={e => setFormData({...formData, seoTitle: e.target.value})} />
-                      </div>
-                      <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Target SEO Keywords</label>
-                        <input className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-bold shadow-inner" placeholder="browser, extensions, tools..." value={formData.seoKeywords || ''} onChange={e => setFormData({...formData, seoKeywords: e.target.value})} />
-                      </div>
-                    </div>
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Article Architecture (Full Content)</label>
-                  <textarea className="w-full p-10 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[3.5rem] outline-none font-medium h-[40rem] leading-relaxed border border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="<h2>Your Heading</h2><p>Your story starts here...</p>" value={formData.content || ''} onChange={e => setFormData({...formData, content: e.target.value})} />
-                </div>
-
-                <div className="flex justify-end pt-10 border-t dark:border-slate-800">
-                  <button onClick={handleSavePost} className="px-20 py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black uppercase text-xs tracking-[0.4em] shadow-2xl shadow-indigo-100 hover:scale-105 transition-all">Authorize Intelligence Sync</button>
+                <div className="flex justify-end pt-4 border-t dark:border-slate-800">
+                  <button onClick={handleSavePost} className="px-12 py-3 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[9px] tracking-[0.2em] shadow-xl hover:scale-105 transition-all">Establish Intelligence Sync</button>
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* 3. Automated Queue */}
+        {/* 3. Scheduler Timeline */}
         {activeTab === 'scheduler' && (
-          <div className="space-y-10 animate-in fade-in duration-500">
-            <header>
-              <h2 className="text-4xl font-black dark:text-white tracking-tighter leading-tight">Automated Queue</h2>
-              <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Real-time timeline of pending asset deployments</p>
-            </header>
-            <div className="grid gap-6">
+          <div className="space-y-6 animate-in fade-in">
+            <h2 className="text-2xl font-black dark:text-white tracking-tighter">Automated Timeline</h2>
+            <div className="grid gap-3">
               {scheduledPosts.length > 0 ? (
                 scheduledPosts.map(p => (
-                  <div key={p.id} className="p-10 bg-white dark:bg-slate-900 rounded-[3.5rem] border dark:border-slate-800 flex items-center justify-between shadow-sm group hover:border-amber-200 transition-all">
-                    <div className="flex items-center gap-10">
-                      <div className="w-24 h-24 rounded-[2.5rem] bg-amber-50 dark:bg-amber-900/10 flex items-center justify-center text-4xl shadow-inner group-hover:rotate-12 transition-transform duration-500 text-amber-500">⏰</div>
+                  <div key={p.id} className="p-6 bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800 flex items-center justify-between shadow-sm">
+                    <div className="flex items-center gap-6">
+                      <div className="w-12 h-12 rounded-xl bg-amber-50 dark:bg-amber-900/10 flex items-center justify-center text-2xl text-amber-500 shadow-inner">⏰</div>
                       <div>
-                        <h3 className="text-2xl font-black dark:text-white tracking-tighter leading-tight">{p.title}</h3>
-                        <div className="flex items-center gap-4 mt-3">
-                           <span className="px-4 py-1.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[9px] font-black uppercase tracking-widest rounded-full">Deployment Pending</span>
-                           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Target Release: {new Date(p.publishDate).toLocaleString()}</p>
-                        </div>
+                        <h3 className="text-base font-black dark:text-white tracking-tight">{p.title}</h3>
+                        <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest mt-1">Pending: {new Date(p.publishDate).toLocaleString()}</p>
                       </div>
                     </div>
-                    <div className="flex gap-4">
-                      <button onClick={() => { setFormData(p); setIsEditing(true); setActiveTab('posts'); }} className="px-8 py-3 bg-slate-900 dark:bg-slate-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 transition-colors">Adjust Time</button>
-                      <button onClick={() => setPosts(posts.map(x => x.id === p.id ? {...x, status: 'published' as PostStatus} : x))} className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-100 hover:bg-emerald-700 transition-all">Force Publish</button>
+                    <div className="flex gap-1.5">
+                      <button onClick={() => { setFormData(p); setIsEditing(true); setActiveTab('posts'); }} className="px-4 py-1.5 bg-slate-900 dark:bg-slate-800 text-white rounded-md font-black text-[8px] uppercase">Adjust</button>
+                      <button onClick={() => setPosts(posts.map(x => x.id === p.id ? {...x, status: 'published' as PostStatus} : x))} className="px-4 py-1.5 bg-emerald-600 text-white rounded-md font-black text-[8px] uppercase shadow-md">Force Live</button>
                     </div>
                   </div>
                 ))
               ) : (
-                <div className="text-center py-40 bg-white dark:bg-slate-900 rounded-[4rem] border-2 border-dashed dark:border-slate-800 text-slate-300 font-black uppercase text-xl tracking-[0.5em]">No Assets in Queue</div>
+                <div className="text-center py-20 bg-white dark:bg-slate-900 rounded-2xl border-2 border-dashed dark:border-slate-800 text-slate-300 font-black uppercase text-sm">Protocol Timeline Clear</div>
               )}
             </div>
           </div>
         )}
 
-        {/* 4. Asset Library (Extensions) */}
+        {/* 4. Asset Library */}
         {activeTab === 'extensions' && (
-          <div className="space-y-10 animate-in fade-in duration-500">
+          <div className="space-y-6 animate-in fade-in">
             <header className="flex justify-between items-center">
-              <h2 className="text-4xl font-black dark:text-white tracking-tighter leading-tight">Asset Directory</h2>
-              {!isEditingExt && <button onClick={() => { setExtFormData({ downloads: 0, rating: 5 }); setIsEditingExt(true); }} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl hover:scale-105 transition-all">+ Register Asset</button>}
+              <h2 className="text-2xl font-black dark:text-white tracking-tighter">Digital Asset Registry</h2>
+              {!isEditingExt && <button onClick={() => { setExtFormData({ downloads: 0, rating: 5 }); setIsEditingExt(true); }} className="px-4 py-1.5 bg-indigo-600 text-white rounded-lg font-black uppercase text-[8px] shadow-sm">+ Register Asset</button>}
             </header>
 
             {!isEditingExt ? (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
                 {extensions.map(ext => (
-                  <div key={ext.id} className="p-10 bg-white dark:bg-slate-900 rounded-[3rem] border dark:border-slate-800 shadow-sm flex flex-col group hover:shadow-2xl transition-all duration-500">
-                    <div className="text-5xl mb-6 bg-slate-50 dark:bg-slate-800 p-6 rounded-3xl w-fit group-hover:scale-110 transition-transform duration-500 shadow-sm">{ext.icon || '🧩'}</div>
-                    <h3 className="text-2xl font-black dark:text-white tracking-tight mb-2 leading-tight">{ext.name}</h3>
-                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-4">{ext.category}</p>
-                    <p className="text-xs text-slate-500 font-medium mb-8 flex-grow line-clamp-3 leading-relaxed">{ext.description}</p>
-                    <div className="flex gap-2">
-                       <button onClick={() => { setExtFormData(ext); setIsEditingExt(true); }} className="flex-grow py-4 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-indigo-600 hover:text-white transition-all">Modify Asset</button>
-                       <button onClick={() => setExtensions(extensions.filter(x => x.id !== ext.id))} className="w-14 h-14 bg-rose-50 dark:bg-rose-900/10 text-rose-500 rounded-2xl flex items-center justify-center text-xl hover:bg-rose-500 hover:text-white transition-all">🗑️</button>
+                  <div key={ext.id} className="p-6 bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800 shadow-sm flex flex-col group transition-all hover:border-indigo-100">
+                    <div className="text-3xl mb-3 bg-slate-50 dark:bg-slate-800 p-3 rounded-xl w-fit shadow-inner">{ext.icon || '🧩'}</div>
+                    <h3 className="text-base font-black dark:text-white truncate mb-1">{ext.name}</h3>
+                    <p className="text-[7px] text-slate-400 font-black uppercase tracking-widest mb-4">{ext.category}</p>
+                    <div className="flex gap-1 mt-auto">
+                       <button onClick={() => { setExtFormData(ext); setIsEditingExt(true); }} className="flex-grow py-2 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-lg font-black text-[8px] uppercase hover:bg-indigo-600 hover:text-white transition-all">Modify</button>
+                       <button onClick={() => setExtensions(extensions.filter(x => x.id !== ext.id))} className="w-8 h-8 bg-rose-50 dark:bg-rose-900/10 text-rose-500 rounded-lg flex items-center justify-center text-base hover:bg-rose-500 hover:text-white transition-all">🗑️</button>
                     </div>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="bg-white dark:bg-slate-900 p-12 rounded-[3.5rem] border dark:border-slate-800 space-y-10 shadow-2xl animate-in slide-in-from-bottom-10">
-                 <h3 className="text-3xl font-black dark:text-white tracking-tighter">Directory Asset Registry</h3>
-                 <div className="grid grid-cols-2 gap-8">
-                    <input className="p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-3xl outline-none font-bold shadow-inner" placeholder="Extension Name" value={extFormData.name || ''} onChange={e => setExtFormData({...extFormData, name: e.target.value})} />
-                    <input className="p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-3xl outline-none font-bold text-center text-4xl shadow-inner" placeholder="Asset Icon (Emoji)" value={extFormData.icon || ''} onChange={e => setExtFormData({...extFormData, icon: e.target.value})} />
-                    <input className="p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-3xl outline-none font-bold shadow-inner" placeholder="Functional Category" value={extFormData.category || ''} onChange={e => setExtFormData({...extFormData, category: e.target.value})} />
-                    <input className="p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-3xl outline-none font-bold shadow-inner" placeholder="Store URL / Download Path" value={extFormData.storeUrl || ''} onChange={e => setExtFormData({...extFormData, storeUrl: e.target.value})} />
+              <div className="bg-white dark:bg-slate-900 p-8 rounded-2xl border dark:border-slate-800 space-y-6 animate-in slide-in-from-bottom-5 shadow-2xl">
+                 <h3 className="text-xl font-black dark:text-white tracking-tighter">Registry Sync</h3>
+                 <div className="grid grid-cols-2 gap-4">
+                    <input className="p-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-lg outline-none font-bold text-xs shadow-inner" placeholder="Name" value={extFormData.name || ''} onChange={e => setExtFormData({...extFormData, name: e.target.value})} />
+                    <input className="p-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-lg outline-none font-bold text-center text-2xl shadow-inner" placeholder="Icon" value={extFormData.icon || ''} onChange={e => setExtFormData({...extFormData, icon: e.target.value})} />
                  </div>
-                 <textarea className="w-full p-8 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[2rem] outline-none font-bold h-32 shadow-inner" placeholder="Full Asset Description..." value={extFormData.description || ''} onChange={e => setExtFormData({...extFormData, description: e.target.value})} />
-                 <div className="flex gap-4">
+                 <div className="flex gap-2">
                     <button onClick={() => {
                         const newExt: Extension = { id: extFormData.id || `ext-${Date.now()}`, name: extFormData.name || '', description: extFormData.description || '', category: extFormData.category || 'General', rating: 5, downloads: extFormData.downloads || 0, icon: extFormData.icon, storeUrl: extFormData.storeUrl };
                         if (extFormData.id) setExtensions(extensions.map(e => e.id === extFormData.id ? newExt : e));
                         else setExtensions([newExt, ...extensions]);
                         setIsEditingExt(false);
-                    }} className="flex-grow py-6 bg-indigo-600 text-white rounded-3xl font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-100">Authorize Asset Sync</button>
-                    <button onClick={() => setIsEditingExt(false)} className="px-10 py-6 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-3xl font-black uppercase tracking-widest text-xs">Discard</button>
+                    }} className="flex-grow py-3 bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg">Authorize Sync</button>
+                    <button onClick={() => setIsEditingExt(false)} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-xl font-black uppercase tracking-widest text-[9px]">Discard</button>
                  </div>
               </div>
             )}
           </div>
         )}
 
-        {/* 5. Engagement Intelligence (CLEANED - NO FAKE DATA) */}
+        {/* 5. Analytics Distribution */}
         {activeTab === 'analytics' && (
-          <div className="space-y-12 animate-in fade-in duration-500">
-            <header><h2 className="text-4xl font-black dark:text-white tracking-tighter leading-tight">Engagement Intelligence</h2></header>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-               <div className="p-10 bg-white dark:bg-slate-900 rounded-[3rem] border dark:border-slate-800 shadow-sm flex flex-col">
-                 <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-10">Top Editorial Impact (Real Views)</h4>
-                 <div className="space-y-6 flex-grow">
-                    {topPerformers.length > 0 ? topPerformers.map((p,i)=>(
+          <div className="space-y-8 animate-in fade-in">
+            <h2 className="text-2xl font-black dark:text-white tracking-tighter">Engagement Impact</h2>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+               <div className="p-6 bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800 shadow-sm flex flex-col h-[30rem] overflow-y-auto">
+                 <h4 className="text-[8px] font-black uppercase text-slate-400 tracking-widest mb-6">Asset Rankings</h4>
+                 <div className="space-y-4">
+                    {topPerformers.map((p,i)=>(
                       <div key={i} className="flex items-center justify-between group">
-                        <div className="flex items-center gap-4 truncate">
-                          <span className="text-slate-300 font-black text-xs">0{i+1}</span>
-                          <span className="text-xs font-black truncate max-w-[150px] dark:text-white group-hover:text-indigo-600 transition-colors cursor-default">{p.title}</span>
-                        </div>
-                        <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1 rounded-full">{(p.views||0).toLocaleString()}</span>
+                        <span className="text-[9px] font-black truncate max-w-[120px] dark:text-white group-hover:text-indigo-600 transition-colors">{p.title}</span>
+                        <span className="text-[8px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/10 px-2 py-0.5 rounded-full">{p.views||0}</span>
                       </div>
-                    )) : (
-                      <p className="text-slate-300 font-bold uppercase text-[10px] text-center py-20">Awaiting engagement data...</p>
-                    )}
+                    ))}
                  </div>
                </div>
-               
-               <div className="md:col-span-2 p-10 bg-white dark:bg-slate-900 rounded-[3rem] border dark:border-slate-800 shadow-sm h-[32rem]">
-                  <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-10">Historical Asset Engagement (Direct Data)</h4>
+               <div className="md:col-span-2 p-6 bg-white dark:bg-slate-900 rounded-2xl border dark:border-slate-800 shadow-sm h-[30rem]">
+                  <h4 className="text-[8px] font-black uppercase text-slate-400 tracking-widest mb-6">Reach Historical Architecture</h4>
                   <ResponsiveContainer width="100%" height="80%">
                     <BarChart data={realPostAnalytics}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? '#1e293b' : '#f1f5f9'} />
-                      <XAxis dataKey="name" tick={{fontSize: 9, fontWeight: 900}} stroke={darkMode ? '#475569' : '#cbd5e1'} />
+                      <XAxis dataKey="name" tick={{fontSize: 7, fontWeight: 900}} stroke="#94a3b8" />
                       <YAxis hide />
-                      <Tooltip 
-                        cursor={{fill: 'transparent'}} 
-                        contentStyle={{borderRadius: '20px', border:'none', fontWeight:'900', background: darkMode ? '#0f172a' : '#fff', color: darkMode ? '#fff' : '#000'}} 
-                      />
-                      <Bar dataKey="views" fill="#4f46e5" radius={[15, 15, 0, 0]} barSize={50}>
-                        {realPostAnalytics.map((entry, index) => (
-                           <Cell key={`cell-${index}`} fillOpacity={0.8} />
-                        ))}
+                      <Tooltip contentStyle={{borderRadius: '10px', fontSize: '9px', fontWeight: '800'}} />
+                      <Bar dataKey="views" fill="#4f46e5" radius={[6, 6, 0, 0]} barSize={30}>
+                         {realPostAnalytics.map((entry, index) => <Cell key={`cell-${index}`} fillOpacity={0.8} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>
                </div>
             </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-               <div className="p-10 bg-white dark:bg-slate-900 rounded-[3rem] border dark:border-slate-800 shadow-sm">
-                 <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-10">Directory Adoption Statistics</h4>
-                 <div className="h-64">
-                   <ResponsiveContainer width="100%" height="100%">
-                     <BarChart data={extensionAnalytics} layout="vertical">
-                       <XAxis type="number" hide />
-                       <YAxis dataKey="name" type="category" tick={{fontSize: 9, fontWeight: 900}} stroke={darkMode ? '#475569' : '#cbd5e1'} width={80} />
-                       <Tooltip 
-                          contentStyle={{borderRadius: '20px', border:'none', fontWeight:'900', background: darkMode ? '#0f172a' : '#fff', color: darkMode ? '#fff' : '#000'}}
-                       />
-                       <Bar dataKey="downloads" fill="#10b981" radius={[0, 10, 10, 0]} barSize={20} />
-                     </BarChart>
-                   </ResponsiveContainer>
-                 </div>
-               </div>
-               <div className="p-10 bg-indigo-600 rounded-[3rem] shadow-xl text-white flex flex-col justify-center items-center text-center">
-                  <div className="text-6xl mb-6">📈</div>
-                  <h3 className="text-3xl font-black tracking-tighter mb-4">Core Analytics Engine</h3>
-                  <p className="text-xs font-bold uppercase tracking-widest opacity-70">Direct sync with Local Storage DB</p>
-                  <p className="mt-8 font-black text-5xl">{(totalViews).toLocaleString()}</p>
-                  <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50 mt-2">Verified Impressions</p>
-               </div>
-            </div>
           </div>
         )}
 
-        {/* 6. Settings (Database & SEO) */}
+        {/* 6. Continuity Settings */}
         {activeTab === 'settings' && (
-          <div className="max-w-4xl space-y-12 animate-in fade-in duration-500">
+          <div className="max-w-3xl space-y-8 animate-in fade-in">
             <header>
-              <h2 className="text-4xl font-black dark:text-white tracking-tighter leading-tight">System Continuity</h2>
-              <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Global infrastructure & state recovery</p>
+              <h2 className="text-2xl font-black dark:text-white tracking-tighter">System Continuity</h2>
+              <p className="text-slate-400 font-bold uppercase text-[8px] tracking-widest">Global persistence & state management</p>
             </header>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-              <div className="bg-white dark:bg-slate-900 p-10 rounded-[3.5rem] border dark:border-slate-800 shadow-sm space-y-10">
-                <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl shadow-sm">🛡️</div>
-                <h3 className="text-2xl font-black dark:text-white tracking-tight leading-tight">Master Database Access</h3>
-                <div className="grid grid-cols-1 gap-4">
-                  <button onClick={exportData} className="py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:scale-105 transition-all">Export JSON Backup</button>
-                  <button onClick={() => fileInputRef.current?.click()} className="py-5 bg-slate-900 dark:bg-slate-800 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-all shadow-lg">Restore from Save Point</button>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-sm space-y-6">
+                <div className="w-10 h-10 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 rounded-xl flex items-center justify-center text-xl shadow-inner">🛡️</div>
+                <h3 className="text-base font-black dark:text-white tracking-tight">Data Vault</h3>
+                <div className="grid grid-cols-1 gap-2">
+                  <button onClick={() => {
+                    const data = { posts, extensions, timestamp: new Date().toISOString() };
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a'); link.href = url; link.download = `cms-vault-${Date.now()}.json`; link.click();
+                    showNotice('Backup Downloaded', 'success');
+                  }} className="py-2.5 bg-indigo-600 text-white rounded-lg font-black uppercase text-[8px] tracking-widest shadow-md">Export Master JSON</button>
+                  <button onClick={() => fileInputRef.current?.click()} className="py-2.5 bg-slate-900 dark:bg-slate-800 text-white rounded-lg font-black uppercase text-[8px] tracking-widest">Restore Recovery Point</button>
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-900 p-10 rounded-[3.5rem] border dark:border-slate-800 shadow-sm space-y-10">
-                <div className="w-16 h-16 bg-amber-50 dark:bg-amber-900/10 text-amber-600 rounded-2xl flex items-center justify-center text-3xl shadow-sm">🚀</div>
-                <h3 className="text-2xl font-black dark:text-white tracking-tight leading-tight">SEO Cloud Infrastructure</h3>
-                <div className="grid grid-cols-1 gap-4">
-                  <button onClick={generateSitemap} className="py-5 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-all shadow-emerald-100 shadow-lg">Regenerate Sitemap.xml</button>
+              <div className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border dark:border-slate-800 shadow-sm space-y-6">
+                <div className="w-10 h-10 bg-amber-50 dark:bg-amber-900/10 text-amber-600 rounded-xl flex items-center justify-center text-xl shadow-inner">🚀</div>
+                <h3 className="text-base font-black dark:text-white tracking-tight">SEO Cloud</h3>
+                <div className="grid grid-cols-1 gap-2">
+                  <button onClick={() => {
+                    const baseUrl = window.location.origin;
+                    let xml = `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">`;
+                    posts.filter(p => p.status === 'published').forEach(p => { xml += `<url><loc>${baseUrl}/blog/${p.id}</loc></url>`; });
+                    xml += `</urlset>`;
+                    const blob = new Blob([xml], { type: 'text/xml' });
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a'); link.href = url; link.download = 'sitemap.xml'; link.click();
+                    showNotice('Sitemap Synchronized', 'success');
+                  }} className="py-2.5 bg-emerald-600 text-white rounded-lg font-black uppercase text-[8px] tracking-widest shadow-md">Regenerate Sitemap</button>
                   <button onClick={() => {
                     const txt = `User-agent: *\nAllow: /\nSitemap: ${window.location.origin}/sitemap.xml`;
                     const blob = new Blob([txt], { type: 'text/plain' });
                     const url = URL.createObjectURL(blob);
-                    const link = document.createElement('a');
-                    link.href = url;
-                    link.download = 'robots.txt';
-                    link.click();
-                  }} className="py-5 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-all">Download Robots.txt</button>
+                    const link = document.createElement('a'); link.href = url; link.download = 'robots.txt'; link.click();
+                    showNotice('Robots.txt Ready', 'info');
+                  }} className="py-2.5 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-lg font-black uppercase text-[8px] tracking-widest">Fetch Robots.txt</button>
                 </div>
               </div>
-            </div>
-
-            <div className="bg-slate-900 dark:bg-indigo-600 text-white p-12 rounded-[4rem] shadow-2xl relative overflow-hidden group">
-               <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-1000"></div>
-               <div className="relative z-10 flex justify-between items-center">
-                 <div>
-                   <h4 className="text-3xl font-black tracking-tighter mb-2">Core Integrity: Stable</h4>
-                   <p className="text-xs font-bold uppercase tracking-widest opacity-60">Production Engine v4.8.2</p>
-                 </div>
-                 <div className="text-right">
-                    <p className="text-4xl font-black">ACTIVE</p>
-                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60">Direct Storage Sync</p>
-                 </div>
-               </div>
             </div>
           </div>
         )}

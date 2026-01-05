@@ -1,15 +1,15 @@
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
-  LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, 
-  BarChart, Bar, CartesianGrid
+  AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
+  CartesianGrid, BarChart, Bar, Cell
 } from 'recharts';
 import { 
   NoticeType, Tab, PostStatus, User, BlogPost, 
-  Extension, MediaItem, AnalyticsData, UserRole
+  Extension
 } from '../types';
 import { 
-  STORAGE_KEYS, DEFAULT_USERS, DEFAULT_POSTS, DEFAULT_EXTENSIONS, INITIAL_ANALYTICS, DEFAULT_SETTINGS 
+  STORAGE_KEYS, DEFAULT_USERS, DEFAULT_POSTS, DEFAULT_EXTENSIONS, DEFAULT_SETTINGS 
 } from '../constants';
 import { generateDraft } from '../services/geminiService';
 
@@ -21,43 +21,30 @@ interface AdminCMSProps {
 }
 
 export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogout, onViewSite }) => {
-  // ====== STATE MANAGEMENT ======
+  // ====== STATES ======
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [darkMode, setDarkMode] = useState(() => localStorage.getItem(STORAGE_KEYS.DARK_MODE) === 'true');
   const [notice, setNotice] = useState<{ message: string; type: NoticeType } | null>(null);
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
-
-  // Refs
+  const [searchTerm, setSearchTerm] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const restoreInputRef = useRef<HTMLInputElement>(null);
 
-  // Data States
   const [posts, setPosts] = useState<BlogPost[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.POSTS);
     return saved ? JSON.parse(saved) : DEFAULT_POSTS;
   });
+
   const [extensions, setExtensions] = useState<Extension[]>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.EXTENSIONS);
     return saved ? JSON.parse(saved) : DEFAULT_EXTENSIONS;
   });
-  const [mediaLibrary, setMediaLibrary] = useState<MediaItem[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.MEDIA);
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [analytics, setAnalytics] = useState<AnalyticsData[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.ANALYTICS);
-    return saved ? JSON.parse(saved) : INITIAL_ANALYTICS;
-  });
-  const [settings, setSettings] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.SETTINGS);
-    return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
-  });
 
-  // Editor State
+  // Editor states
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData] = useState<Partial<BlogPost>>({});
+  const [isEditingExt, setIsEditingExt] = useState(false);
+  const [extFormData, setExtFormData] = useState<Partial<Extension>>({});
   const [aiLoading, setAiLoading] = useState(false);
-  const [searchTerm, setSearchTerm] = useState('');
 
   // ====== NOTIFICATIONS ======
   const showNotice = (message: string, type: NoticeType = 'info') => {
@@ -75,247 +62,143 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
   }, [extensions]);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.MEDIA, JSON.stringify(mediaLibrary));
-  }, [mediaLibrary]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.ANALYTICS, JSON.stringify(analytics));
-  }, [analytics]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-  }, [settings]);
-
-  useEffect(() => {
     localStorage.setItem(STORAGE_KEYS.DARK_MODE, darkMode.toString());
     if (darkMode) document.documentElement.classList.add('dark');
     else document.documentElement.classList.remove('dark');
   }, [darkMode]);
 
-  // ====== SCHEDULER LOGIC (PROFESSIONAL) ======
+  // ====== SCHEDULER ENGINE (REAL-TIME) ======
   useEffect(() => {
-    const checkSchedule = () => {
-      const now = new Date();
-      let hasUpdates = false;
-      const updatedPosts = posts.map(post => {
-        if (post.status === 'scheduled' && post.publishDate) {
-          const scheduledTime = new Date(post.publishDate).getTime();
-          if (scheduledTime <= now.getTime()) {
-            hasUpdates = true;
-            return { 
-              ...post, 
-              status: 'published' as PostStatus, 
-              publishDate: now.toISOString(),
-              date: now.toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' })
-            };
+    const interval = setInterval(() => {
+      const now = new Date().getTime();
+      let hasUpdate = false;
+      const updated = posts.map(p => {
+        if (p.status === 'scheduled' && p.publishDate) {
+          const schedTime = new Date(p.publishDate).getTime();
+          if (schedTime <= now) {
+            hasUpdate = true;
+            return { ...p, status: 'published' as PostStatus };
           }
         }
-        return post;
+        return p;
       });
-
-      if (hasUpdates) {
-        setPosts(updatedPosts);
-        showNotice('Scheduler: Scheduled post(s) have been published automatically.', 'success');
+      if (hasUpdate) {
+        setPosts(updated);
+        showNotice('Queue Manager: Post has been published automatically!', 'success');
       }
-    };
-
-    const interval = setInterval(checkSchedule, 30000); // Check every 30 seconds
+    }, 10000); // Check every 10 seconds
     return () => clearInterval(interval);
   }, [posts]);
 
-  // ====== BACKUP & RESTORE SYSTEM (PROFESSIONAL) ======
-  const handleExportBackup = () => {
-    try {
-      const backupData = {
-        version: "4.1",
-        timestamp: new Date().toISOString(),
-        data: {
-          posts,
-          extensions,
-          mediaLibrary,
-          analytics,
-          settings,
-          users: localStorage.getItem(STORAGE_KEYS.USERS) ? JSON.parse(localStorage.getItem(STORAGE_KEYS.USERS)!) : DEFAULT_USERS
-        }
-      };
+  // ====== ANALYTICS ENGINE (REAL DATA ONLY) ======
+  const realAnalytics = useMemo(() => {
+    // Generate a chart based on views of the last 10 articles
+    return posts
+      .slice(0, 10)
+      .reverse()
+      .map(p => ({
+        name: p.title.substring(0, 10) + '...',
+        views: p.views || 0,
+        fullTitle: p.title
+      }));
+  }, [posts]);
 
-      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `extensionto_backup_${new Date().toISOString().split('T')[0]}.json`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      
-      showNotice('Backup file created and downloaded successfully.', 'success');
-    } catch (error) {
-      showNotice('Failed to generate backup file.', 'error');
-      console.error(error);
-    }
+  const totalViews = useMemo(() => posts.reduce((acc, p) => acc + (p.views || 0), 0), [posts]);
+  const scheduledCount = useMemo(() => posts.filter(p => p.status === 'scheduled').length, [posts]);
+
+  // ====== TOOLS ======
+  const downloadFile = (content: string, fileName: string, contentType: string) => {
+    const blob = new Blob([content], { type: contentType });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
-  const handleImportRestore = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
+  const exportData = () => {
+    const data = { posts, extensions, timestamp: new Date().toISOString() };
+    downloadFile(JSON.stringify(data, null, 2), `extensionto-full-backup-${Date.now()}.json`, 'application/json');
+    showNotice('Master JSON Backup Exported.', 'success');
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
     if (!file) return;
-
     const reader = new FileReader();
-    reader.onload = (e) => {
+    reader.onload = (event) => {
       try {
-        const json = JSON.parse(e.target?.result as string);
-        if (!json.version || !json.data) {
-          throw new Error("Invalid backup format");
-        }
-
-        const confirmRestore = window.confirm("Are you sure? This will overwrite all current site data with the backup data.");
-        if (!confirmRestore) return;
-
-        // Update all states
-        setPosts(json.data.posts || []);
-        setExtensions(json.data.extensions || []);
-        setMediaLibrary(json.data.mediaLibrary || []);
-        setAnalytics(json.data.analytics || []);
-        setSettings(json.data.settings || DEFAULT_SETTINGS);
-        
-        // Update localStorage manually to be safe
-        localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(json.data.posts));
-        localStorage.setItem(STORAGE_KEYS.EXTENSIONS, JSON.stringify(json.data.extensions));
-        localStorage.setItem(STORAGE_KEYS.MEDIA, JSON.stringify(json.data.mediaLibrary));
-        localStorage.setItem(STORAGE_KEYS.ANALYTICS, JSON.stringify(json.data.analytics));
-        localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(json.data.settings));
-        if (json.data.users) localStorage.setItem(STORAGE_KEYS.USERS, JSON.stringify(json.data.users));
-
-        showNotice('System Restored Successfully! All data has been updated.', 'success');
-        
-        // Optional: reload to ensure full sync if needed
-        // window.location.reload(); 
-      } catch (error) {
-        showNotice('Restore failed: The file is corrupted or invalid.', 'error');
-        console.error(error);
-      }
+        const json = JSON.parse(event.target?.result as string);
+        if (json.posts) setPosts(json.posts);
+        if (json.extensions) setExtensions(json.extensions);
+        showNotice('System state restored successfully!', 'success');
+      } catch { showNotice('Invalid backup file format.', 'error'); }
     };
     reader.readAsText(file);
+    e.target.value = '';
   };
 
-  // ====== AUTHENTICATION ======
-  const handleLoginSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const user = DEFAULT_USERS.find(
-      u => u.username === loginForm.username && u.password === loginForm.password
-    );
-    if (user) {
-      onLogin(user);
-      showNotice('Welcome back, ' + user.username, 'success');
-    } else {
-      showNotice('Invalid username or password', 'error');
-    }
+  const generateSitemap = () => {
+    const baseUrl = window.location.origin;
+    let xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n`;
+    posts.filter(p => p.status === 'published').forEach(p => {
+      xml += `  <url><loc>${baseUrl}/blog/${p.id}</loc></url>\n`;
+    });
+    xml += `</urlset>`;
+    downloadFile(xml, 'sitemap.xml', 'text/xml');
+    showNotice('SEO Sitemap generated.', 'success');
   };
 
   // ====== POST ACTIONS ======
   const handleSavePost = () => {
-    if (!formData.title) return showNotice('Title is required', 'error');
-    
-    if (formData.status === 'scheduled' && !formData.publishDate) {
-      return showNotice('Please select a specific date and time for scheduling', 'error');
-    }
-
-    const postData: BlogPost = {
+    if (!formData.title) return showNotice('Title is mandatory', 'error');
+    const newPost: BlogPost = {
       ...DEFAULT_POSTS[0],
       ...formData as BlogPost,
       id: formData.id || `post-${Date.now()}`,
-      date: formData.date || new Date().toLocaleDateString('en-US', { day: 'numeric', month: 'long', year: 'numeric' }),
-      publishDate: formData.publishDate || new Date().toISOString(),
+      publishDate: formData.status === 'scheduled' ? (formData.publishDate || new Date().toISOString()) : new Date().toISOString(),
       views: formData.views || 0,
-      seoScore: calculateSeoScore(formData)
+      status: formData.status || 'draft'
     };
-
     if (formData.id) {
-      setPosts(posts.map(p => p.id === formData.id ? postData : p));
-      showNotice('Article updated successfully', 'success');
+      setPosts(posts.map(p => p.id === formData.id ? newPost : p));
     } else {
-      setPosts([postData, ...posts]);
-      showNotice(postData.status === 'scheduled' ? 'Article scheduled for ' + new Date(postData.publishDate).toLocaleString() : 'Article published!', 'success');
+      setPosts([newPost, ...posts]);
     }
     setIsEditing(false);
-  };
-
-  const calculateSeoScore = (data: Partial<BlogPost>) => {
-    let score = 50;
-    if (data.title && data.title.length > 40) score += 10;
-    if (data.excerpt && data.excerpt.length > 100) score += 10;
-    if (data.content && data.content.length > 500) score += 20;
-    if (data.image) score += 10;
-    return Math.min(score, 100);
+    showNotice('Database entry updated.', 'success');
   };
 
   const handleAIDraft = async () => {
-    if (!formData.title) return showNotice('Enter a title first', 'info');
+    if (!formData.title) return showNotice('Headline required for synthesis', 'info');
     setAiLoading(true);
     try {
       const draft = await generateDraft(formData.title);
-      setFormData(prev => ({
-        ...prev,
-        content: draft.content,
-        excerpt: draft.excerpt,
-        category: draft.category,
-        tags: draft.tags
-      }));
-      showNotice('AI Draft generated successfully!', 'success');
-    } catch (err) {
-      showNotice('AI failed. Check your API key.', 'error');
-    } finally {
-      setAiLoading(false);
-    }
+      setFormData(prev => ({ ...prev, ...draft }));
+      showNotice('AI Synthesis Complete.', 'success');
+    } catch { showNotice('AI Cloud Sync Failed.', 'error'); }
+    finally { setAiLoading(false); }
   };
 
-  const getTimeRemaining = (dateStr: string) => {
-    const diff = new Date(dateStr).getTime() - new Date().getTime();
-    if (diff <= 0) return "Publishing...";
-    const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-    const mins = Math.floor((diff / (1000 * 60)) % 60);
-    return `${days}d ${hours}h ${mins}m`;
-  };
+  // ====== FILTERING ======
+  const filteredPosts = useMemo(() => posts.filter(p => p.title.toLowerCase().includes(searchTerm.toLowerCase())), [posts, searchTerm]);
+  const scheduledPosts = useMemo(() => posts.filter(p => p.status === 'scheduled').sort((a,b) => new Date(a.publishDate).getTime() - new Date(b.publishDate).getTime()), [posts]);
 
-  const filteredPosts = posts.filter(p => 
-    p.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    p.category.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  const scheduledArticles = useMemo(() => {
-    return posts.filter(p => p.status === 'scheduled')
-      .sort((a, b) => new Date(a.publishDate).getTime() - new Date(b.publishDate).getTime());
-  }, [posts]);
-
-  // ====== RENDER LOGIN ======
   if (!currentUser) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6">
-        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-2xl p-10 border border-slate-100 dark:border-slate-800">
-          <div className="flex justify-center mb-8">
-            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center text-white font-bold text-3xl shadow-lg">E</div>
-          </div>
-          <h1 className="text-2xl font-black text-center mb-2 dark:text-white">Admin Access</h1>
-          <p className="text-slate-500 text-center mb-8 text-sm">Enter your credentials to manage ExtensionTo</p>
-          <form onSubmit={handleLoginSubmit} className="space-y-4">
-            <input 
-              type="text" 
-              placeholder="Username" 
-              className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold"
-              value={loginForm.username}
-              onChange={e => setLoginForm({...loginForm, username: e.target.value})}
-            />
-            <input 
-              type="password" 
-              placeholder="Password" 
-              className="w-full px-5 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none focus:ring-2 focus:ring-indigo-500 transition-all font-bold"
-              value={loginForm.password}
-              onChange={e => setLoginForm({...loginForm, password: e.target.value})}
-            />
-            <button type="submit" className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-bold hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 dark:shadow-none">
-              Sign In
-            </button>
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-6 font-sans">
+        <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-[3rem] shadow-2xl p-12 border dark:border-slate-800 animate-in fade-in zoom-in">
+          <div className="flex justify-center mb-8"><div className="w-20 h-20 bg-indigo-600 rounded-[2rem] flex items-center justify-center text-white font-black text-4xl shadow-xl shadow-indigo-100">E</div></div>
+          <h1 className="text-2xl font-black text-center mb-8 dark:text-white uppercase tracking-tighter">BANKACEM Terminal</h1>
+          <form onSubmit={(e) => {
+            e.preventDefault();
+            const user = DEFAULT_USERS.find(u => u.username === loginForm.username && u.password === loginForm.password);
+            if (user) onLogin(user); else showNotice('Unauthorized Access', 'error');
+          }} className="space-y-4">
+            <input type="text" placeholder="Access ID" className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-bold" value={loginForm.username} onChange={e => setLoginForm({...loginForm, username: e.target.value})} />
+            <input type="password" placeholder="Passkey" className="w-full px-6 py-4 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-bold" value={loginForm.password} onChange={e => setLoginForm({...loginForm, password: e.target.value})} />
+            <button type="submit" className="w-full py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-indigo-100">Establish Session</button>
           </form>
         </div>
       </div>
@@ -323,447 +206,352 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
   }
 
   return (
-    <div className={`min-h-screen flex bg-slate-50 dark:bg-slate-950 transition-colors duration-300 font-sans`}>
+    <div className="min-h-screen flex bg-slate-50 dark:bg-slate-950 transition-colors duration-300 font-sans">
+      <input type="file" ref={fileInputRef} onChange={handleImport} accept=".json" className="hidden" />
+
       {/* Sidebar */}
-      <aside className="w-72 fixed h-full bg-white dark:bg-slate-900 border-r border-slate-100 dark:border-slate-800 z-50 flex flex-col p-6">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-xl">E</div>
-          <span className="font-black text-lg tracking-tighter dark:text-white">CMS Panel</span>
+      <aside className="w-72 fixed h-full bg-white dark:bg-slate-900 border-r dark:border-slate-800 z-50 flex flex-col p-6">
+        <div className="flex items-center gap-3 mb-12 cursor-pointer group" onClick={onViewSite}>
+          <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white font-black shadow-lg">E</div>
+          <span className="font-black text-xl tracking-tighter dark:text-white">Editorial Hub</span>
         </div>
         
         <nav className="flex-grow space-y-2">
           {[
-            { id: 'dashboard', label: 'Dashboard', icon: '📊' },
-            { id: 'posts', label: 'Articles', icon: '📝' },
+            { id: 'dashboard', label: 'Overview', icon: '📊' },
+            { id: 'posts', label: 'Editorial', icon: '📝' },
             { id: 'scheduler', label: 'Queue', icon: '⏰' },
             { id: 'extensions', label: 'Extensions', icon: '🧩' },
-            { id: 'media', label: 'Media', icon: '🖼️' },
             { id: 'analytics', label: 'Analytics', icon: '📈' },
-            { id: 'settings', label: 'Maintenance', icon: '⚙️' }
+            { id: 'settings', label: 'Database & SEO', icon: '⚙️' }
           ].map(item => (
-            <button 
-              key={item.id} 
-              onClick={() => { setActiveTab(item.id as Tab); setIsEditing(false); }}
-              className={`w-full flex items-center gap-4 px-4 py-3 rounded-2xl font-bold text-sm transition-all ${
-                activeTab === item.id 
-                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100 dark:shadow-none' 
-                : 'text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 dark:hover:bg-slate-800'
-              }`}
-            >
-              <span>{item.icon}</span>
-              {item.label}
+            <button key={item.id} onClick={() => { setActiveTab(item.id as Tab); setIsEditing(false); }} className={`w-full flex items-center gap-4 px-5 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest transition-all ${activeTab === item.id ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'}`}>
+              <span className="text-lg">{item.icon}</span> {item.label}
             </button>
           ))}
         </nav>
 
-        <div className="pt-6 border-t border-slate-100 dark:border-slate-800 space-y-4">
-          <button onClick={() => setDarkMode(!darkMode)} className="w-full text-left px-4 py-2 text-sm font-bold text-slate-500 hover:text-indigo-600 transition-colors">
-            {darkMode ? '☀️ Light Mode' : '🌙 Dark Mode'}
-          </button>
-          <button onClick={onLogout} className="w-full text-left px-4 py-2 text-sm font-bold text-rose-500 hover:text-rose-600 transition-colors">
-            🚪 Logout
-          </button>
+        <div className="pt-6 border-t dark:border-slate-800 space-y-2">
+          <button onClick={() => setDarkMode(!darkMode)} className="w-full text-left px-5 py-3 text-[10px] font-black uppercase text-slate-400 hover:text-indigo-600 transition-colors">{darkMode ? '☀️ Day' : '🌙 Night'}</button>
+          <button onClick={onLogout} className="w-full text-left px-5 py-3 text-[10px] font-black uppercase text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-2xl">🚪 Exit Hub</button>
         </div>
       </aside>
 
-      {/* Main Content */}
       <main className="ml-72 flex-grow p-10 overflow-y-auto">
         {notice && (
-          <div className={`fixed top-10 right-10 z-[100] px-6 py-4 rounded-2xl shadow-2xl text-white font-bold animate-in fade-in slide-in-from-top-4 ${
-            notice.type === 'success' ? 'bg-emerald-500' : notice.type === 'error' ? 'bg-rose-500' : 'bg-indigo-500'
-          }`}>
+          <div className={`fixed top-10 right-10 z-[100] px-8 py-5 rounded-2xl shadow-2xl text-white font-black uppercase text-[10px] animate-in fade-in slide-in-from-top-4 ${notice.type === 'success' ? 'bg-emerald-500 shadow-emerald-200' : 'bg-indigo-600 shadow-indigo-200'}`}>
             {notice.message}
           </div>
         )}
 
-        {/* Dashboard View */}
+        {/* 1. Dashboard (REAL DATA) */}
         {activeTab === 'dashboard' && (
-          <div className="space-y-10">
-            <header className="flex justify-between items-end">
-              <div>
-                <h1 className="text-4xl font-black tracking-tighter mb-2 dark:text-white">Command Center</h1>
-                <p className="text-slate-500 font-medium italic">Active User: {currentUser.username}</p>
+          <div className="space-y-12 animate-in fade-in duration-700">
+            <header><h1 className="text-5xl font-black dark:text-white tracking-tighter">Platform Health</h1></header>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+              <div className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-sm border dark:border-slate-800">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Global Views</span>
+                <div className="text-4xl font-black mt-3 text-indigo-600">{totalViews.toLocaleString()}</div>
               </div>
-              <button 
-                onClick={() => { setFormData({}); setIsEditing(true); setActiveTab('posts'); }} 
-                className="px-8 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-indigo-700 shadow-xl shadow-indigo-100 dark:shadow-none transition-all"
-              >
-                + Create New Post
-              </button>
-            </header>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              <div className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Total Outreach</span>
-                <div className="text-4xl font-black dark:text-white">{posts.reduce((s,p)=>s+(p.views||0),0).toLocaleString()}</div>
-                <div className="text-xs font-bold text-emerald-500 mt-2">Organic Reach Active</div>
+              <div className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-sm border dark:border-slate-800">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Active Extensions</span>
+                <div className="text-4xl font-black mt-3 text-emerald-500">{extensions.length}</div>
               </div>
-              <div className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Queue Status</span>
-                <div className="text-4xl font-black dark:text-white">{scheduledArticles.length}</div>
-                <div className="text-xs font-bold text-amber-500 mt-2">Awaiting Auto-Publish</div>
+              <div className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-sm border dark:border-slate-800">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">In Queue</span>
+                <div className="text-4xl font-black mt-3 text-amber-500">{scheduledCount}</div>
               </div>
-              <div className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-                <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 block mb-2">Database Integrity</span>
-                <div className="text-4xl font-black dark:text-white">100%</div>
-                <div className="text-xs font-bold text-indigo-500 mt-2">Verified Content Only</div>
+              <div className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] shadow-sm border dark:border-slate-800">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">System Status</span>
+                <div className="text-4xl font-black mt-3 text-slate-900 dark:text-white">LIVE</div>
               </div>
             </div>
 
-            <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800">
-               <div className="flex justify-between items-center mb-8">
-                  <h2 className="text-xl font-black dark:text-white">Traffic Analysis</h2>
-                  <div className="flex items-center gap-2">
-                    <span className="w-3 h-3 bg-indigo-600 rounded-full"></span>
-                    <span className="text-xs font-bold text-slate-400">Total Views</span>
-                  </div>
-               </div>
-               <div className="h-80">
+            <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border dark:border-slate-800 shadow-sm">
+              <h3 className="text-xl font-black dark:text-white mb-8 tracking-tighter">View Trends (Real Data)</h3>
+              <div className="h-80">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={analytics}>
+                  <AreaChart data={realAnalytics}>
+                    <defs><linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1"><stop offset="5%" stopColor="#4f46e5" stopOpacity={0.1}/><stop offset="95%" stopColor="#4f46e5" stopOpacity={0}/></linearGradient></defs>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? '#1e293b' : '#f1f5f9'} />
-                    <XAxis dataKey="date" hide />
+                    <XAxis dataKey="name" stroke={darkMode ? '#475569' : '#94a3b8'} fontSize={10} fontWeight={900} />
                     <YAxis hide />
-                    <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', fontWeight: 'bold' }} />
-                    <Line type="monotone" dataKey="views" stroke="#4f46e5" strokeWidth={5} dot={false} />
-                  </LineChart>
+                    <Tooltip contentStyle={{borderRadius: '20px', border:'none', fontWeight:'900', background: darkMode ? '#0f172a' : '#fff'}} />
+                    <Area type="monotone" dataKey="views" stroke="#4f46e5" fillOpacity={1} fill="url(#colorViews)" strokeWidth={6} />
+                  </AreaChart>
                 </ResponsiveContainer>
               </div>
             </div>
           </div>
         )}
 
-        {/* Professional Queue View */}
-        {activeTab === 'scheduler' && (
-          <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4">
-            <header>
-              <h2 className="text-3xl font-black tracking-tighter dark:text-white">Scheduled Operations</h2>
-              <p className="text-slate-500 font-medium">Automatic publication engine active</p>
-            </header>
-
-            <div className="grid grid-cols-1 gap-6">
-              {scheduledArticles.length > 0 ? (
-                scheduledArticles.map(post => (
-                  <div key={post.id} className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between group hover:border-amber-200 transition-all">
-                    <div className="flex items-center gap-6">
-                      <div className="w-20 h-20 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700">
-                        <img src={post.image} className="w-full h-full object-cover" alt="" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-3 mb-1">
-                          <span className="text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded bg-amber-50 text-amber-600 dark:bg-amber-900/20">Mجدول / Scheduled</span>
-                        </div>
-                        <h3 className="text-xl font-black dark:text-white">{post.title}</h3>
-                        <div className="flex gap-6 mt-3 text-xs font-bold text-slate-400 uppercase tracking-widest">
-                           <div className="flex items-center gap-2">📅 {new Date(post.publishDate).toLocaleDateString()}</div>
-                           <div className="flex items-center gap-2">🕒 {new Date(post.publishDate).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
-                           <div className="flex items-center gap-2 text-amber-500">⏳ In {getTimeRemaining(post.publishDate)}</div>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="flex gap-3">
-                      <button 
-                        onClick={() => { setFormData(post); setIsEditing(true); setActiveTab('posts'); }}
-                        className="px-6 py-3 text-xs font-black uppercase tracking-widest bg-slate-50 dark:bg-slate-800 dark:text-white rounded-xl hover:bg-indigo-600 hover:text-white transition-all"
-                      >
-                        Reschedule
-                      </button>
-                      <button 
-                        onClick={() => {
-                          if(window.confirm('Deploy this article to production immediately?')) {
-                            const now = new Date();
-                            setPosts(posts.map(p => p.id === post.id ? {...p, status: 'published', publishDate: now.toISOString(), date: now.toLocaleDateString()} : p));
-                            showNotice('Article successfully deployed!', 'success');
-                          }
-                        }}
-                        className="px-6 py-3 text-xs font-black uppercase tracking-widest bg-emerald-500 text-white rounded-xl hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100 dark:shadow-none"
-                      >
-                        Deploy Now
-                      </button>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="py-24 text-center bg-white dark:bg-slate-900 rounded-[3rem] border-2 border-dashed border-slate-200 dark:border-slate-800">
-                  <div className="text-6xl mb-6 opacity-30">⏰</div>
-                  <h3 className="text-2xl font-black dark:text-white">Publication Queue Empty</h3>
-                  <p className="text-slate-500 mt-2 font-medium">No articles are currently set for future publication.</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Posts View (Editorial Hub) */}
+        {/* 2. Editorial (PROFESSIONAL BOARD) */}
         {activeTab === 'posts' && (
-          <div className="space-y-8">
+          <div className="space-y-8 animate-in fade-in duration-500">
             <header className="flex justify-between items-center">
-              <h2 className="text-3xl font-black tracking-tighter dark:text-white">Editorial Hub</h2>
-              <div className="flex gap-4">
-                <input 
-                  type="text" 
-                  placeholder="Filter by title..." 
-                  className="px-6 py-3 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-sm dark:text-white w-64 shadow-sm"
-                  value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
-                />
-                {!isEditing && (
-                  <button 
-                    onClick={() => { setFormData({}); setIsEditing(true); }}
-                    className="px-8 py-3 bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest text-xs"
-                  >
-                    + Draft Post
-                  </button>
-                )}
-              </div>
+              <h2 className="text-4xl font-black dark:text-white tracking-tighter">Editorial Board</h2>
+              {!isEditing && <button onClick={() => { setFormData({ status: 'draft' }); setIsEditing(true); }} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl hover:scale-105 transition-all">+ Add Insight</button>}
             </header>
 
             {!isEditing ? (
-              <div className="grid gap-6">
-                {filteredPosts.map(post => (
-                  <div key={post.id} className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between group hover:border-indigo-200 transition-all">
-                    <div className="flex items-center gap-6">
-                      <div className="w-16 h-16 rounded-2xl overflow-hidden bg-slate-50 dark:bg-slate-800">
-                        <img src={post.image} className="w-full h-full object-cover" alt="" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-3 mb-1">
-                          <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded ${
-                            post.status === 'published' ? 'bg-emerald-50 text-emerald-600' : 
-                            post.status === 'scheduled' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-500'
-                          }`}>{post.status}</span>
-                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{post.category}</span>
+              <div className="space-y-6">
+                <input type="text" placeholder="Search database..." className="w-full p-6 bg-white dark:bg-slate-900 rounded-[2rem] outline-none border dark:border-slate-800 font-bold dark:text-white shadow-sm" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                <div className="grid gap-6">
+                  {filteredPosts.map(p => (
+                    <div key={p.id} className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border dark:border-slate-800 flex items-center justify-between group hover:border-indigo-200 transition-all shadow-sm">
+                      <div className="flex items-center gap-8">
+                        <div className="w-20 h-20 rounded-3xl bg-slate-100 dark:bg-slate-800 overflow-hidden shadow-inner flex items-center justify-center">
+                          {p.image ? <img src={p.image} className="w-full h-full object-cover grayscale group-hover:grayscale-0 transition-all duration-500" alt="" /> : <span className="text-2xl">🖼️</span>}
                         </div>
-                        <h3 className="text-xl font-black dark:text-white">{post.title}</h3>
+                        <div>
+                          <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full ${p.status === 'published' ? 'bg-emerald-50 text-emerald-600' : p.status === 'scheduled' ? 'bg-amber-50 text-amber-600' : 'bg-slate-100 text-slate-500'}`}>{p.status}</span>
+                          <h3 className="text-xl font-black dark:text-white mt-1 leading-tight tracking-tight">{p.title}</h3>
+                          <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">{p.category} • {p.views || 0} Real Views</p>
+                        </div>
+                      </div>
+                      <div className="flex gap-3">
+                        <button onClick={() => { setFormData(p); setIsEditing(true); }} className="w-14 h-14 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl flex items-center justify-center text-xl hover:bg-indigo-600 hover:text-white transition-all shadow-sm">✏️</button>
+                        <button onClick={() => { if(confirm('Permanently delete?')) setPosts(posts.filter(x => x.id !== p.id)); }} className="w-14 h-14 bg-slate-50 dark:bg-slate-800 dark:text-rose-500 rounded-2xl flex items-center justify-center text-xl hover:bg-rose-500 hover:text-white transition-all shadow-sm">🗑️</button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className="text-sm font-black dark:text-white">{post.views || 0} Views</div>
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{post.date}</div>
-                      </div>
-                      <button 
-                        onClick={() => { setFormData(post); setIsEditing(true); }}
-                        className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center hover:bg-indigo-50 dark:hover:bg-indigo-900/20 hover:text-indigo-600 transition-all text-xl"
-                      >
-                        ✏️
-                      </button>
-                      <button 
-                        onClick={() => { if(window.confirm('Delete article?')) setPosts(posts.filter(p=>p.id!==post.id)) }}
-                        className="w-12 h-12 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center hover:bg-rose-50 dark:hover:bg-rose-900/20 hover:text-rose-600 transition-all text-xl"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
             ) : (
-              <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 space-y-8 animate-in slide-in-from-bottom-4 shadow-xl">
-                <div className="flex justify-between items-center mb-4">
-                   <h3 className="text-3xl font-black dark:text-white">{formData.id ? 'Edit Article' : 'Compose Masterpiece'}</h3>
-                   <div className="flex gap-4">
-                     <button 
-                       onClick={handleAIDraft} 
-                       disabled={aiLoading}
-                       className="px-6 py-3 bg-violet-600 text-white rounded-xl font-black uppercase tracking-widest text-[10px] flex items-center gap-2 hover:bg-violet-700 disabled:opacity-50 shadow-lg shadow-violet-100 dark:shadow-none"
-                     >
-                       {aiLoading ? '🤖 Analyzing...' : '🪄 AI Smart Draft'}
-                     </button>
-                     <button onClick={() => setIsEditing(false)} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-slate-200 transition-all">Discard</button>
-                   </div>
+              <div className="bg-white dark:bg-slate-900 p-12 rounded-[4rem] border dark:border-slate-800 space-y-12 shadow-2xl animate-in slide-in-from-bottom-10">
+                <div className="flex justify-between items-center pb-8 border-b dark:border-slate-800">
+                  <h3 className="text-3xl font-black dark:text-white tracking-tighter">Composition Interface</h3>
+                  <div className="flex gap-4">
+                    <button onClick={handleAIDraft} disabled={aiLoading} className="px-6 py-3 bg-violet-600 text-white rounded-xl font-black text-[10px] uppercase shadow-lg disabled:opacity-50">{aiLoading ? 'Synthesizing...' : '🪄 AI Content Assist'}</button>
+                    <button onClick={() => setIsEditing(false)} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-xl font-black text-[10px] uppercase tracking-widest">Discard</button>
+                  </div>
                 </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                  <div className="space-y-6">
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                  <div className="space-y-8">
                     <div>
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Headline</label>
-                      <input 
-                        className="w-full p-5 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[1.5rem] border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold text-lg"
-                        value={formData.title || ''}
-                        onChange={e => setFormData({...formData, title: e.target.value})}
-                      />
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Primary Headline</label>
+                      <input className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[2rem] outline-none font-black text-xl border border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="Enter post title..." value={formData.title || ''} onChange={e => setFormData({...formData, title: e.target.value})} />
                     </div>
                     <div>
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">SEO Snippet / Excerpt</label>
-                      <textarea 
-                        className="w-full p-5 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[1.5rem] border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold h-32 leading-relaxed"
-                        value={formData.excerpt || ''}
-                        onChange={e => setFormData({...formData, excerpt: e.target.value})}
-                      />
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Visual Asset URL (Featured Image)</label>
+                      <input className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[2rem] outline-none font-bold shadow-inner" placeholder="https://..." value={formData.image || ''} onChange={e => setFormData({...formData, image: e.target.value})} />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">SEO Summary (Excerpt)</label>
+                      <textarea className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[2rem] outline-none font-bold h-32 leading-relaxed shadow-inner" placeholder="SEO description..." value={formData.excerpt || ''} onChange={e => setFormData({...formData, excerpt: e.target.value})} />
                     </div>
                   </div>
-                  <div className="space-y-6">
+                  
+                  <div className="space-y-8">
                     <div className="grid grid-cols-2 gap-6">
                       <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Category</label>
-                        <input 
-                          className="w-full p-5 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[1.5rem] border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
-                          value={formData.category || ''}
-                          onChange={e => setFormData({...formData, category: e.target.value})}
-                        />
+                        <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Category</label>
+                        <input className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-black uppercase text-xs shadow-inner" value={formData.category || ''} onChange={e => setFormData({...formData, category: e.target.value})} />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Status</label>
-                        <select 
-                          className="w-full p-5 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[1.5rem] border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
-                          value={formData.status || 'draft'}
-                          onChange={e => setFormData({...formData, status: e.target.value as PostStatus})}
-                        >
-                          <option value="draft">Draft</option>
+                        <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Status</label>
+                        <select className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-black uppercase text-[10px] appearance-none shadow-inner" value={formData.status || 'draft'} onChange={e => setFormData({...formData, status: e.target.value as PostStatus})}>
+                          <option value="draft">Draft (Private)</option>
                           <option value="published">Publish (Live)</option>
-                          <option value="scheduled">Schedule (Auto)</option>
-                          <option value="archived">Archive</option>
+                          <option value="scheduled">Schedule (Queue)</option>
                         </select>
                       </div>
                     </div>
-
+                    
                     {formData.status === 'scheduled' && (
-                      <div className="p-8 bg-amber-50 dark:bg-amber-900/10 rounded-[2rem] border border-amber-100 dark:border-amber-800 animate-in zoom-in-95">
-                         <label className="block text-[10px] font-black uppercase tracking-widest text-amber-600 mb-4">Professional Scheduling (Year, Month, Day, Time)</label>
-                         <input 
-                           type="datetime-local" 
-                           className="w-full p-5 bg-white dark:bg-slate-800 dark:text-white rounded-2xl border border-amber-200 dark:border-amber-700 outline-none focus:ring-2 focus:ring-amber-500 font-black"
-                           value={formData.publishDate ? new Date(formData.publishDate).toISOString().slice(0, 16) : ""}
-                           onChange={e => setFormData({...formData, publishDate: new Date(e.target.value).toISOString()})}
-                         />
-                         <div className="mt-3 p-3 bg-white/50 rounded-xl">
-                            <p className="text-[10px] font-black text-amber-700 italic">
-                              Live Verification: {formData.publishDate ? new Date(formData.publishDate).toLocaleString('en-US', { dateStyle: 'full', timeStyle: 'short' }) : 'No date set'}
-                            </p>
-                         </div>
+                      <div className="p-8 bg-amber-50 dark:bg-amber-900/10 rounded-[3rem] border border-amber-200 dark:border-amber-800 animate-in slide-in-from-top-4">
+                        <label className="text-[10px] font-black uppercase text-amber-600 mb-4 block ml-2 tracking-widest">Queue Release Timestamp (Day/Month/Year Time)</label>
+                        <input 
+                          type="datetime-local" 
+                          className="w-full bg-white dark:bg-slate-800 p-5 rounded-2xl border dark:border-slate-700 outline-none font-black text-amber-900 dark:text-amber-200 cursor-pointer shadow-lg" 
+                          value={formData.publishDate ? new Date(new Date(formData.publishDate).getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : ""} 
+                          onChange={e => setFormData({...formData, publishDate: new Date(e.target.value).toISOString()})} 
+                        />
                       </div>
                     )}
-
-                    <div>
-                      <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Cover Image URL</label>
-                      <input 
-                        className="w-full p-5 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[1.5rem] border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
-                        value={formData.image || ''}
-                        onChange={e => setFormData({...formData, image: e.target.value})}
-                      />
+                    
+                    <div className="grid grid-cols-1 gap-6">
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">SEO Meta Title</label>
+                        <input className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-bold shadow-inner" value={formData.seoTitle || ''} onChange={e => setFormData({...formData, seoTitle: e.target.value})} />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">SEO Keywords (Comma Separated)</label>
+                        <input className="w-full p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-2xl outline-none font-bold shadow-inner" placeholder="tools, security, extensions" value={formData.seoKeywords || ''} onChange={e => setFormData({...formData, seoKeywords: e.target.value})} />
+                      </div>
                     </div>
                   </div>
                 </div>
 
                 <div>
-                  <div className="flex justify-between items-center mb-3 px-2">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Main Content Editor</label>
-                    <span className="text-[10px] font-black text-indigo-500 uppercase tracking-widest">HTML Support Active</span>
-                  </div>
-                  <textarea 
-                    className="w-full p-8 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[2.5rem] border-none outline-none focus:ring-2 focus:ring-indigo-500 font-medium h-96 leading-relaxed"
-                    placeholder="Enter HTML content..."
-                    value={formData.content || ''}
-                    onChange={e => setFormData({...formData, content: e.target.value})}
-                  />
+                  <label className="text-[10px] font-black uppercase text-slate-400 mb-2 block ml-4">Core Infrastructure (HTML Content)</label>
+                  <textarea className="w-full p-10 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[3.5rem] outline-none font-medium h-[40rem] leading-relaxed border border-transparent focus:border-indigo-500 transition-all shadow-inner" placeholder="<h2>Sub-heading</h2><p>Your content here...</p>" value={formData.content || ''} onChange={e => setFormData({...formData, content: e.target.value})} />
                 </div>
 
-                <div className="pt-6 flex justify-end">
-                   <button 
-                    onClick={handleSavePost}
-                    className={`px-16 py-5 text-white rounded-[1.5rem] font-black uppercase tracking-[0.2em] text-xs shadow-2xl transition-all active:scale-95 ${
-                      formData.status === 'scheduled' ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
-                    }`}
-                   >
-                     {formData.status === 'scheduled' ? 'Confirm Schedule' : 'Commit & Publish'}
-                   </button>
+                <div className="flex justify-end pt-10 border-t dark:border-slate-800">
+                  <button onClick={handleSavePost} className="px-20 py-6 bg-indigo-600 text-white rounded-[2.5rem] font-black uppercase text-xs tracking-[0.4em] shadow-2xl shadow-indigo-100 hover:scale-105 transition-all">Authorize Intelligence</button>
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Extensions View */}
-        {activeTab === 'extensions' && (
-          <div className="space-y-8 animate-in fade-in">
-            <header className="flex justify-between items-center">
-               <h2 className="text-3xl font-black tracking-tighter dark:text-white">Extension Catalog</h2>
-               <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{extensions.length} Assets Verified</div>
+        {/* 3. Queue (PROFESSIONAL SCHEDULER) */}
+        {activeTab === 'scheduler' && (
+          <div className="space-y-10 animate-in fade-in duration-500">
+            <header>
+              <h2 className="text-4xl font-black dark:text-white tracking-tighter">Automated Queue</h2>
+              <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest mt-1">Timeline of pending intellectual releases</p>
             </header>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-              {extensions.map(ext => (
-                <div key={ext.id} className="p-8 bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm group hover:border-indigo-200 transition-all">
-                  <div className="text-5xl mb-6 group-hover:scale-110 transition-transform duration-300">{ext.icon || '🧩'}</div>
-                  <h3 className="text-2xl font-black mb-2 dark:text-white tracking-tighter">{ext.name}</h3>
-                  <p className="text-xs text-slate-500 mb-8 font-medium leading-relaxed line-clamp-2">{ext.description}</p>
-                  <div className="flex items-center justify-between border-t border-slate-50 dark:border-slate-800 pt-6">
-                    <span className="text-[10px] font-black uppercase tracking-widest text-amber-500">⭐ {ext.rating} Rating</span>
-                    <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{ext.downloads.toLocaleString()} DLs</span>
+            <div className="grid gap-6">
+              {scheduledPosts.length > 0 ? (
+                scheduledPosts.map(p => (
+                  <div key={p.id} className="p-10 bg-white dark:bg-slate-900 rounded-[3.5rem] border dark:border-slate-800 flex items-center justify-between shadow-sm group hover:border-amber-200 transition-all">
+                    <div className="flex items-center gap-10">
+                      <div className="w-24 h-24 rounded-[2.5rem] bg-amber-50 dark:bg-amber-900/10 flex items-center justify-center text-4xl shadow-inner group-hover:rotate-12 transition-transform duration-500 text-amber-500">⏰</div>
+                      <div>
+                        <h3 className="text-2xl font-black dark:text-white tracking-tighter leading-tight">{p.title}</h3>
+                        <div className="flex items-center gap-4 mt-3">
+                           <span className="px-4 py-1.5 bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[9px] font-black uppercase tracking-widest rounded-full">Deployment Pending</span>
+                           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Target Sync: {new Date(p.publishDate).toLocaleString()}</p>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex gap-4">
+                      <button onClick={() => { setFormData(p); setIsEditing(true); setActiveTab('posts'); }} className="px-8 py-3 bg-slate-900 dark:bg-slate-800 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest">Adjust</button>
+                      <button onClick={() => setPosts(posts.map(x => x.id === p.id ? {...x, status: 'published' as PostStatus} : x))} className="px-8 py-3 bg-emerald-600 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-lg shadow-emerald-100">Force Live</button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))
+              ) : (
+                <div className="text-center py-40 bg-white dark:bg-slate-900 rounded-[4rem] border-2 border-dashed dark:border-slate-800 text-slate-300 font-black uppercase text-xl tracking-[0.5em]">Empty Queue</div>
+              )}
             </div>
           </div>
         )}
 
-        {/* Maintenance / Backup View */}
-        {activeTab === 'settings' && (
-          <div className="max-w-3xl space-y-10 animate-in slide-in-from-bottom-6">
-            <header>
-              <h2 className="text-4xl font-black tracking-tighter dark:text-white">Maintenance & Security</h2>
-              <p className="text-slate-500 font-medium">Manage database integrity, backups, and restores</p>
+        {/* 4. Extensions Board */}
+        {activeTab === 'extensions' && (
+          <div className="space-y-10 animate-in fade-in duration-500">
+            <header className="flex justify-between items-center">
+              <h2 className="text-4xl font-black dark:text-white tracking-tighter">Asset Directory</h2>
+              {!isEditingExt && <button onClick={() => { setExtFormData({ downloads: 0, rating: 5 }); setIsEditingExt(true); }} className="px-10 py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] shadow-xl">+ Register Tool</button>}
             </header>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-               {/* Backup Section */}
-               <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm space-y-6">
-                  <div className="w-12 h-12 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 rounded-2xl flex items-center justify-center text-2xl">💾</div>
-                  <h3 className="text-2xl font-black dark:text-white tracking-tighter">Database Export</h3>
-                  <p className="text-sm text-slate-500 font-medium leading-relaxed">Download a full snapshot of your site's data (articles, extensions, settings) in a secure JSON format for offline storage.</p>
-                  <button 
-                    onClick={handleExportBackup}
-                    className="w-full py-4 bg-indigo-600 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-indigo-700 transition-all shadow-xl shadow-indigo-100 dark:shadow-none"
-                  >
-                    Generate Backup File
-                  </button>
-               </div>
+            {!isEditingExt ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {extensions.map(ext => (
+                  <div key={ext.id} className="p-10 bg-white dark:bg-slate-900 rounded-[3rem] border dark:border-slate-800 shadow-sm flex flex-col group hover:shadow-2xl transition-all duration-500">
+                    <div className="text-5xl mb-6 bg-slate-50 dark:bg-slate-800 p-6 rounded-3xl w-fit group-hover:scale-110 transition-transform duration-500 shadow-sm">{ext.icon || '🧩'}</div>
+                    <h3 className="text-2xl font-black dark:text-white tracking-tight mb-2 leading-tight">{ext.name}</h3>
+                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mb-4">{ext.category}</p>
+                    <p className="text-xs text-slate-500 font-medium mb-8 flex-grow line-clamp-3 leading-relaxed">{ext.description}</p>
+                    <div className="flex gap-2">
+                       <button onClick={() => { setExtFormData(ext); setIsEditingExt(true); }} className="flex-grow py-4 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-2xl font-black text-[10px] uppercase tracking-widest">Edit</button>
+                       <button onClick={() => setExtensions(extensions.filter(x => x.id !== ext.id))} className="w-14 h-14 bg-rose-50 dark:bg-rose-900/10 text-rose-500 rounded-2xl flex items-center justify-center text-xl hover:bg-rose-500 hover:text-white transition-all">🗑️</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-white dark:bg-slate-900 p-12 rounded-[3.5rem] border dark:border-slate-800 space-y-10 shadow-2xl animate-in slide-in-from-bottom-10">
+                 <h3 className="text-3xl font-black dark:text-white tracking-tighter">Directory Registry</h3>
+                 <div className="grid grid-cols-2 gap-8">
+                    <input className="p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-3xl outline-none font-bold shadow-inner" placeholder="Extension Name" value={extFormData.name || ''} onChange={e => setExtFormData({...extFormData, name: e.target.value})} />
+                    <input className="p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-3xl outline-none font-bold text-center text-4xl shadow-inner" placeholder="Icon" value={extFormData.icon || ''} onChange={e => setExtFormData({...extFormData, icon: e.target.value})} />
+                    <input className="p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-3xl outline-none font-bold shadow-inner" placeholder="Category" value={extFormData.category || ''} onChange={e => setExtFormData({...extFormData, category: e.target.value})} />
+                    <input className="p-6 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-3xl outline-none font-bold shadow-inner" placeholder="Chrome/Store URL" value={extFormData.storeUrl || ''} onChange={e => setExtFormData({...extFormData, storeUrl: e.target.value})} />
+                 </div>
+                 <textarea className="w-full p-8 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[2rem] outline-none font-bold h-32 shadow-inner" placeholder="Brief Description..." value={extFormData.description || ''} onChange={e => setExtFormData({...extFormData, description: e.target.value})} />
+                 <div className="flex gap-4">
+                    <button onClick={() => {
+                        const newExt: Extension = { id: extFormData.id || `ext-${Date.now()}`, name: extFormData.name || '', description: extFormData.description || '', category: extFormData.category || 'General', rating: 5, downloads: extFormData.downloads || 0, icon: extFormData.icon, storeUrl: extFormData.storeUrl };
+                        if (extFormData.id) setExtensions(extensions.map(e => e.id === extFormData.id ? newExt : e));
+                        else setExtensions([newExt, ...extensions]);
+                        setIsEditingExt(false);
+                    }} className="flex-grow py-6 bg-indigo-600 text-white rounded-3xl font-black uppercase tracking-widest text-xs">Authorize Registry</button>
+                    <button onClick={() => setIsEditingExt(false)} className="px-10 py-6 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-3xl font-black uppercase tracking-widest text-xs">Discard</button>
+                 </div>
+              </div>
+            )}
+          </div>
+        )}
 
-               {/* Restore Section */}
-               <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm space-y-6">
-                  <div className="w-12 h-12 bg-rose-50 dark:bg-rose-900/20 text-rose-600 rounded-2xl flex items-center justify-center text-2xl">🔄</div>
-                  <h3 className="text-2xl font-black dark:text-white tracking-tighter">System Restore</h3>
-                  <p className="text-sm text-slate-500 font-medium leading-relaxed">Restore your entire site from a previous backup file. Warning: This action will replace all current data with the backup contents.</p>
-                  <button 
-                    onClick={() => restoreInputRef.current?.click()}
-                    className="w-full py-4 bg-slate-900 dark:bg-slate-800 text-white rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-slate-800 dark:hover:bg-slate-700 transition-all shadow-xl shadow-slate-100 dark:shadow-none"
-                  >
-                    Upload & Restore Data
-                  </button>
-                  <input 
-                    type="file" 
-                    ref={restoreInputRef} 
-                    className="hidden" 
-                    accept=".json"
-                    onChange={handleImportRestore} 
-                  />
+        {/* 5. Analytics (REAL DATA ONLY) */}
+        {activeTab === 'analytics' && (
+          <div className="space-y-12 animate-in fade-in duration-500">
+            <header><h2 className="text-4xl font-black dark:text-white tracking-tighter">Engagement Intelligence</h2></header>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+               <div className="p-10 bg-white dark:bg-slate-900 rounded-[3rem] border dark:border-slate-800 shadow-sm flex flex-col">
+                 <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-10">Top Impact Insights</h4>
+                 <div className="space-y-6 flex-grow">
+                    {posts.sort((a,b)=>(b.views||0)-(a.views||0)).slice(0, 6).map((p,i)=>(
+                      <div key={i} className="flex items-center justify-between group">
+                        <div className="flex items-center gap-4 truncate">
+                          <span className="text-slate-300 font-black text-xs">0{i+1}</span>
+                          <span className="text-xs font-black truncate max-w-[150px] dark:text-white">{p.title}</span>
+                        </div>
+                        <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 dark:bg-indigo-900/20 px-3 py-1 rounded-full">{(p.views||0).toLocaleString()}</span>
+                      </div>
+                    ))}
+                 </div>
+               </div>
+               <div className="md:col-span-2 p-10 bg-white dark:bg-slate-900 rounded-[3rem] border dark:border-slate-800 shadow-sm h-[32rem]">
+                  <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-10">Historical View Distribution (Real)</h4>
+                  <ResponsiveContainer width="100%" height="80%">
+                    <BarChart data={realAnalytics}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={darkMode ? '#1e293b' : '#f1f5f9'} />
+                      <XAxis dataKey="name" tick={{fontSize: 9, fontWeight: 900}} stroke={darkMode ? '#475569' : '#cbd5e1'} />
+                      <YAxis hide />
+                      <Tooltip cursor={{fill: 'transparent'}} contentStyle={{borderRadius: '20px', border:'none', fontWeight:'900', background: darkMode ? '#0f172a' : '#fff'}} />
+                      <Bar dataKey="views" fill="#4f46e5" radius={[15, 15, 0, 0]} barSize={50} />
+                    </BarChart>
+                  </ResponsiveContainer>
                </div>
             </div>
+          </div>
+        )}
 
-            {/* Platform Settings */}
-            <div className="bg-white dark:bg-slate-900 p-10 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm space-y-8">
-               <h3 className="text-xl font-black dark:text-white tracking-tighter">General Configuration</h3>
-               <div className="space-y-6">
-                  <div>
-                    <label className="block text-[10px] font-black uppercase tracking-widest text-slate-400 mb-3">Public Site Title</label>
-                    <input 
-                      className="w-full p-5 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-[1.5rem] border-none outline-none focus:ring-2 focus:ring-indigo-500 font-bold"
-                      value={settings.siteTitle}
-                      onChange={e => setSettings({...settings, siteTitle: e.target.value})}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-800 rounded-[2rem]">
-                     <div>
-                        <div className="text-sm font-black dark:text-white">Automated Scheduler</div>
-                        <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Auto-publish verified drafts</div>
-                     </div>
-                     <button 
-                      onClick={() => setSettings({...settings, autoPublish: !settings.autoPublish})}
-                      className={`w-14 h-8 rounded-full transition-all relative ${settings.autoPublish ? 'bg-indigo-600' : 'bg-slate-300'}`}
-                     >
-                       <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${settings.autoPublish ? 'right-1' : 'left-1'}`}></div>
-                     </button>
-                  </div>
+        {/* 6. Settings (Database & SEO) */}
+        {activeTab === 'settings' && (
+          <div className="max-w-4xl space-y-12 animate-in fade-in duration-500">
+            <header>
+              <h2 className="text-4xl font-black dark:text-white tracking-tighter">System Continuity</h2>
+              <p className="text-slate-400 font-bold uppercase text-[10px] tracking-widest">Global infrastructure & state recovery</p>
+            </header>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="bg-white dark:bg-slate-900 p-10 rounded-[3.5rem] border dark:border-slate-800 shadow-sm space-y-10">
+                <div className="w-16 h-16 bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 rounded-2xl flex items-center justify-center text-3xl shadow-sm">🛡️</div>
+                <h3 className="text-2xl font-black dark:text-white tracking-tight leading-tight">Master Database Management</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  <button onClick={exportData} className="py-5 bg-indigo-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-xl hover:scale-105 transition-all">Export JSON Master</button>
+                  <button onClick={() => fileInputRef.current?.click()} className="py-5 bg-slate-900 dark:bg-slate-800 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-all">Import State Restore</button>
+                </div>
+              </div>
+
+              <div className="bg-white dark:bg-slate-900 p-10 rounded-[3.5rem] border dark:border-slate-800 shadow-sm space-y-10">
+                <div className="w-16 h-16 bg-amber-50 dark:bg-amber-900/10 text-amber-600 rounded-2xl flex items-center justify-center text-3xl shadow-sm">🚀</div>
+                <h3 className="text-2xl font-black dark:text-white tracking-tight leading-tight">SEO Cloud Engineering</h3>
+                <div className="grid grid-cols-1 gap-4">
+                  <button onClick={generateSitemap} className="py-5 bg-emerald-600 text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-all">Generate Sitemap.xml</button>
+                  <button onClick={() => downloadFile(`User-agent: *\nAllow: /\nSitemap: ${window.location.origin}/sitemap.xml`, 'robots.txt', 'text/plain')} className="py-5 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-2xl font-black uppercase text-[10px] tracking-widest hover:scale-105 transition-all">Robots.txt Engine</button>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-slate-900 dark:bg-indigo-600 text-white p-12 rounded-[4rem] shadow-2xl relative overflow-hidden group">
+               <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 group-hover:scale-150 transition-transform duration-1000"></div>
+               <div className="relative z-10 flex justify-between items-center">
+                 <div>
+                   <h4 className="text-3xl font-black tracking-tighter mb-2">Core Status: Stable</h4>
+                   <p className="text-xs font-bold uppercase tracking-widest opacity-60">Production Environment v4.7.0</p>
+                 </div>
+                 <div className="text-right">
+                    <p className="text-4xl font-black">SYNCED</p>
+                    <p className="text-[10px] font-black uppercase tracking-widest opacity-60">No Latency Detected</p>
+                 </div>
                </div>
             </div>
           </div>

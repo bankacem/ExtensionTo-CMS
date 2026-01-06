@@ -4,6 +4,7 @@ import { AdminCMS } from './components/AdminCMS';
 import { PublicSite } from './components/PublicSite';
 import { User } from './types';
 import { STORAGE_KEYS } from './constants';
+import * as api from './services/api';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -14,7 +15,8 @@ const App: React.FC = () => {
     const savedAuth = localStorage.getItem(STORAGE_KEYS.AUTH);
     if (savedAuth) {
       try {
-        setCurrentUser(JSON.parse(savedAuth));
+        const user = JSON.parse(savedAuth);
+        setCurrentUser(user);
       } catch (e) {
         console.error("Auth restoration failed", e);
       }
@@ -31,9 +33,16 @@ const App: React.FC = () => {
       ) : (
         <AdminCMS 
           currentUser={currentUser} 
-          onLogin={(user) => {
-            setCurrentUser(user);
-            localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify(user));
+          onLogin={async (credentials) => {
+            try {
+              const { token } = await api.login(credentials);
+              const user = { ...credentials, token };
+              setCurrentUser(user as User);
+              localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify(user));
+            } catch (error) {
+              console.error('Login failed', error);
+              // Handle login failure, e.g., show an error message
+            }
           }} 
           onLogout={() => {
             setCurrentUser(null);

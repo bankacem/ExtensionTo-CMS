@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { Extension, BlogPost } from '../types';
-import { STORAGE_KEYS, DEFAULT_POSTS, DEFAULT_EXTENSIONS } from '../constants';
+import * as api from '../services/api';
 
 interface PublicSiteProps {
   onEnterAdmin: () => void;
@@ -19,26 +19,31 @@ export const PublicSite: React.FC<PublicSiteProps> = ({ onEnterAdmin }) => {
 
   // Load real data from CMS storage
   useEffect(() => {
-    const loadData = () => {
-      const savedPosts = localStorage.getItem(STORAGE_KEYS.POSTS);
-      const savedExtensions = localStorage.getItem(STORAGE_KEYS.EXTENSIONS);
-      setPosts(savedPosts ? JSON.parse(savedPosts) : DEFAULT_POSTS);
-      setExtensions(savedExtensions ? JSON.parse(savedExtensions) : DEFAULT_EXTENSIONS);
+    const loadData = async () => {
+        try {
+            const [postsData, extensionsData] = await Promise.all([
+                api.getPosts(),
+                api.getExtensions(),
+            ]);
+            setPosts(postsData);
+            setExtensions(extensionsData);
+        } catch (error) {
+            console.error('Failed to fetch data', error);
+        }
     };
     loadData();
     window.scrollTo(0, 0);
-    window.addEventListener('storage', loadData);
-    return () => window.removeEventListener('storage', loadData);
   }, [page, viewingPost]);
 
-  const handlePostClick = (post: BlogPost) => {
-    const updatedPosts = posts.map(p => {
-      if (p.id === post.id) return { ...p, views: (p.views || 0) + 1 };
-      return p;
-    });
-    setPosts(updatedPosts);
-    localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(updatedPosts));
-    setViewingPost(post);
+  const handlePostClick = async (post: BlogPost) => {
+    const updatedPost = { ...post, views: (post.views || 0) + 1 };
+    setPosts(posts.map(p => (p.id === post.id ? updatedPost : p)));
+    setViewingPost(updatedPost);
+    try {
+      await api.updatePost(post.id, { views: updatedPost.views });
+    } catch (error) {
+      console.error('Failed to update post views', error);
+    }
   };
 
   const categories = useMemo(() => {

@@ -1,14 +1,16 @@
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 
-import { defineConfig } from 'vite';
-import react from '@vitejs/plugin-react';
-
+// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  define: {
-    // نقوم بتعريف المفتاح خصيصاً ليتم استبداله وقت البناء
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || '')
-  },
   server: {
-    port: 3000
-  }
-});
+    proxy: {
+      '/api': {
+        target: 'http://127.0.0.1:8788',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api/, ''),
+      },
+    },
+  },
+})

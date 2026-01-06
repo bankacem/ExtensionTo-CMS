@@ -1,0 +1,22 @@
+name = "backend"
+main = "src/index.ts"
+compatibility_date = "2024-05-29"
+
+[[d1_databases]]
+binding = "DB_1"
+database_name = "DB_1"
+database_id = "DB_1"
+
+[[d1_databases]]
+binding = "DB_2"
+database_name = "DB_2"
+database_id = "DB_2"
+
+[[d1_databases]]
+binding = "DB_3"
+database_name = "DB_3"
+database_id = "DB_3"
+
+[vars]
+BEARER_TOKEN = "0600231590mM@"
+USER_PASSWORD = "0600231590mM@"

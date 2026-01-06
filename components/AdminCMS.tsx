@@ -11,11 +11,12 @@ import {
 import { 
   STORAGE_KEYS, DEFAULT_USERS, DEFAULT_POSTS, DEFAULT_EXTENSIONS 
 } from '../constants';
+import * as api from '../services/api';
 import { generateDraft } from '../services/geminiService';
 
 interface AdminCMSProps {
   currentUser: User | null;
-  onLogin: (user: User) => void;
+  onLogin: (credentials: {username: string, password: string}) => void;
   onLogout: () => void;
   onViewSite: () => void;
 }
@@ -31,15 +32,24 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
   const [showPreview, setShowPreview] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied'>('idle');
 
-  const [posts, setPosts] = useState<BlogPost[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.POSTS);
-    return saved ? JSON.parse(saved) : DEFAULT_POSTS;
-  });
+  const [posts, setPosts] = useState<BlogPost[]>([]);
+  const [extensions, setExtensions] = useState<Extension[]>([]);
 
-  const [extensions, setExtensions] = useState<Extension[]>(() => {
-    const saved = localStorage.getItem(STORAGE_KEYS.EXTENSIONS);
-    return saved ? JSON.parse(saved) : DEFAULT_EXTENSIONS;
-  });
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [postsData, extensionsData] = await Promise.all([
+          api.getPosts(),
+          api.getExtensions(),
+        ]);
+        setPosts(postsData);
+        setExtensions(extensionsData);
+      } catch (error) {
+        console.error('Failed to fetch data', error);
+      }
+    };
+    fetchData();
+  }, []);
 
   // Editor states
   const [isEditing, setIsEditing] = useState(false);
@@ -56,17 +66,8 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
 
   // ====== PERSISTENCE ======
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.POSTS, JSON.stringify(posts));
-  }, [posts]);
-
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.EXTENSIONS, JSON.stringify(extensions));
-  }, [extensions]);
-
-  useEffect(() => {
     const handleStorage = () => {
-      const savedPosts = localStorage.getItem(STORAGE_KEYS.POSTS);
-      if (savedPosts) setPosts(JSON.parse(savedPosts));
+      // This is now handled by the API calls
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
@@ -191,7 +192,7 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
   };
 
   // ====== EDITORIAL ACTIONS ======
-  const handleSavePost = () => {
+  const handleSavePost = async () => {
     if (!formData.title) return showNotice('Headline is required', 'error');
     
     // Logic for scheduling: if scheduled, use the selected date; otherwise, default to now.
@@ -199,22 +200,25 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
       ? (formData.publishDate || new Date().toISOString()) 
       : new Date().toISOString();
 
-    const newPost: BlogPost = {
-      ...DEFAULT_POSTS[0],
-      ...formData as BlogPost,
-      id: formData.id || `post-${Date.now()}`,
+    const newPost: Partial<BlogPost> = {
+      ...formData,
       publishDate: finalPublishDate,
-      views: formData.views || 0,
       status: formData.status || 'draft'
     };
     
-    if (formData.id) {
-      setPosts(posts.map(p => p.id === formData.id ? newPost : p));
-    } else {
-      setPosts([newPost, ...posts]);
+    try {
+        if (formData.id) {
+            const updatedPost = await api.updatePost(formData.id, newPost);
+            setPosts(posts.map(p => p.id === formData.id ? updatedPost : p));
+        } else {
+            const createdPost = await api.createPost(newPost);
+            setPosts([createdPost, ...posts]);
+        }
+        setIsEditing(false);
+        showNotice('Intelligence Synced to Database', 'success');
+    } catch (error) {
+        showNotice('Failed to sync intelligence', 'error');
     }
-    setIsEditing(false);
-    showNotice('Intelligence Synced to Database', 'success');
   };
 
   const handleAIDraft = async () => {
@@ -369,7 +373,12 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
                       </div>
                       <div className="flex gap-1 flex-shrink-0">
                         <button onClick={() => { setFormData(p); setIsEditing(true); }} className="w-7 h-7 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-md flex items-center justify-center text-xs hover:bg-indigo-600 hover:text-white transition-all shadow-sm">✏️</button>
-                        <button onClick={() => { if(confirm('Delete permanently?')) setPosts(posts.filter(x => x.id !== p.id)); }} className="w-7 h-7 bg-slate-50 dark:bg-slate-800 dark:text-rose-500 rounded-md flex items-center justify-center text-xs hover:bg-rose-500 hover:text-white transition-all shadow-sm">🗑️</button>
+                        <button onClick={async () => {
+                            if(confirm('Delete permanently?')) {
+                                await api.deletePost(p.id);
+                                setPosts(posts.filter(x => x.id !== p.id));
+                            }
+                        }} className="w-7 h-7 bg-slate-50 dark:bg-slate-800 dark:text-rose-500 rounded-md flex items-center justify-center text-xs hover:bg-rose-500 hover:text-white transition-all shadow-sm">🗑️</button>
                       </div>
                     </div>
                   ))}
@@ -502,7 +511,12 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
                     <p className="text-[7px] text-slate-400 font-black uppercase tracking-widest mb-4">{ext.category}</p>
                     <div className="flex gap-1 mt-auto">
                        <button onClick={() => { setExtFormData(ext); setIsEditingExt(true); }} className="flex-grow py-2 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-lg font-black text-[8px] uppercase hover:bg-indigo-600 hover:text-white transition-all">Modify</button>
-                       <button onClick={() => setExtensions(extensions.filter(x => x.id !== ext.id))} className="w-8 h-8 bg-rose-50 dark:bg-rose-900/10 text-rose-500 rounded-lg flex items-center justify-center text-base hover:bg-rose-500 hover:text-white transition-all">🗑️</button>
+                       <button onClick={async () => {
+                            if(confirm('Delete permanently?')) {
+                                await api.deleteExtension(ext.id);
+                                setExtensions(extensions.filter(x => x.id !== ext.id));
+                            }
+                       }} className="w-8 h-8 bg-rose-50 dark:bg-rose-900/10 text-rose-500 rounded-lg flex items-center justify-center text-base hover:bg-rose-500 hover:text-white transition-all">🗑️</button>
                     </div>
                   </div>
                 ))}
@@ -515,10 +529,15 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
                     <input className="p-3 bg-slate-50 dark:bg-slate-800 dark:text-white rounded-lg outline-none font-bold text-center text-2xl shadow-inner" placeholder="Icon" value={extFormData.icon || ''} onChange={e => setExtFormData({...extFormData, icon: e.target.value})} />
                  </div>
                  <div className="flex gap-2">
-                    <button onClick={() => {
-                        const newExt: Extension = { id: extFormData.id || `ext-${Date.now()}`, name: extFormData.name || '', description: extFormData.description || '', category: extFormData.category || 'General', rating: 5, downloads: extFormData.downloads || 0, icon: extFormData.icon, storeUrl: extFormData.storeUrl };
-                        if (extFormData.id) setExtensions(extensions.map(e => e.id === extFormData.id ? newExt : e));
-                        else setExtensions([newExt, ...extensions]);
+                    <button onClick={async () => {
+                        const newExt: Partial<Extension> = { ...extFormData };
+                        if (extFormData.id) {
+                            const updatedExt = await api.updateExtension(extFormData.id, newExt);
+                            setExtensions(extensions.map(e => e.id === extFormData.id ? updatedExt : e));
+                        } else {
+                            const createdExt = await api.createExtension(newExt);
+                            setExtensions([createdExt, ...extensions]);
+                        }
                         setIsEditingExt(false);
                     }} className="flex-grow py-3 bg-indigo-600 text-white rounded-xl font-black uppercase tracking-widest text-[9px] shadow-lg">Authorize Sync</button>
                     <button onClick={() => setIsEditingExt(false)} className="px-6 py-3 bg-slate-100 dark:bg-slate-800 dark:text-white rounded-xl font-black uppercase tracking-widest text-[9px]">Discard</button>

@@ -73,6 +73,7 @@ export interface User {
   role: UserRole;
   createdAt: string;
   avatar?: string;
+  token?: string;
 }
 
 export interface GithubSyncInfo {

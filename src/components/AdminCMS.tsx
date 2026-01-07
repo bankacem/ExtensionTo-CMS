@@ -9,7 +9,7 @@ import {
   Extension
 } from '../types';
 import { 
-  STORAGE_KEYS, DEFAULT_USERS, DEFAULT_POSTS, DEFAULT_EXTENSIONS 
+  STORAGE_KEYS, DEFAULT_USERS
 } from '../constants';
 import * as api from '../services/api';
 import { generateDraft } from '../services/geminiService';
@@ -572,7 +572,7 @@ export const AdminCMS: React.FC<AdminCMSProps> = ({ currentUser, onLogin, onLogo
                       <YAxis hide />
                       <Tooltip contentStyle={{borderRadius: '10px', fontSize: '9px', fontWeight: '800'}} />
                       <Bar dataKey="views" fill="#4f46e5" radius={[6, 6, 0, 0]} barSize={30}>
-                         {realPostAnalytics.map((entry, index) => <Cell key={`cell-${index}`} fillOpacity={0.8} />)}
+                         {realPostAnalytics.map((_, index) => <Cell key={`cell-${index}`} fillOpacity={0.8} />)}
                       </Bar>
                     </BarChart>
                   </ResponsiveContainer>

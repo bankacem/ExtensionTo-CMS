@@ -1,1 +1,66 @@
-backend
+# Backend Directory - Absolute Isolation
+backend/
+backend/**/*
+server/
+server/**/*
+functions/
+functions/**/*
+api/
+api/**/*
+src/backend/
+src/server/
+src/api/
+
+# Build Artifacts - Prevent Contamination
+dist/
+build/
+.next/
+out/
+.nuxt/
+.output/
+coverage/
+.nyc_output/
+*.log
+*.log.*
+.DS_Store
+Thumbs.db
+
+# Development Files - Keep Clean
+.env.local
+.env.development
+.env.test
+.env.production
+*.env
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Package Lock Files (Keep Only Root)
+backend/package-lock.json
+backend/yarn.lock
+backend/pnpm-lock.yaml
+server/package-lock.json
+functions/package-lock.json
+
+# TypeScript Build Info
+backend/tsconfig.tsbuildinfo
+backend/.tsbuildinfo
+*.tsbuildinfo
+
+# Test Files
+**/*.test.ts
+**/*.test.tsx
+**/*.test.js
+**/*.test.jsx
+**/*.spec.ts
+**/*.spec.tsx
+**/*.spec.js
+**/*.spec.jsx
+tests/backend/
+tests/server/
+tests/api/
+
+# Documentation
+docs/backend/
+docs/server/
+README.backend.md

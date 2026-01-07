@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Compiled JavaScript in source
+src/**/*.js
+src/**/*.js.map

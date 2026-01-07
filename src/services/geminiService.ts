@@ -2,9 +2,15 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
 export const generateDraft = async (title: string) => {
-  // Use the process.env.API_KEY directly when initializing the GoogleGenAI client as per guidelines.
-  // Assume process.env.API_KEY is pre-configured and accessible.
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY as string });
+  // Use Vite's import.meta.env for client-side environment variables
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+
+  if (!apiKey) {
+    console.error("VITE_GEMINI_API_KEY is not set. Please add it to your .env file.");
+    throw new Error("Missing API Key");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
   
   const prompt = `Write a professional blog post about "${title}" for a browser extensions hub.
     Requirements:
@@ -31,7 +37,6 @@ export const generateDraft = async (title: string) => {
     }
   });
 
-  // Extract text from the response using the .text property (not a method).
   const text = response.text;
   if (!text) throw new Error("No response from AI");
   

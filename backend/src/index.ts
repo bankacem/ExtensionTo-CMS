@@ -5,6 +5,7 @@ import posts from './posts';
 import extensions from './extensions';
 import users from './users';
 import seo from './seo';
+import login from './login';
 
 /**
  * Type-safe bindings for Hono's context.
@@ -12,6 +13,7 @@ import seo from './seo';
  */
 export type Bindings = {
   ADMIN_TOKEN: string;
+  ADMIN_PASSWORD: string; // Added for the login endpoint
   VERCEL_STORAGE: R2Bucket; // Assuming you've named your Vercel Blob Storage binding 'VERCEL_STORAGE'
   DB_1: D1Database;
   DB_2: D1Database;
@@ -21,7 +23,6 @@ export type Bindings = {
 const app = new Hono<{ Bindings: Bindings }>();
 
 // Global CORS middleware to handle pre-flight OPTIONS requests
-// IMPORTANT: Replace 'https://your-vercel-domain.com' with your actual frontend domain
 app.use('*', cors({
   origin: 'https://extensionto.com',
   allowHeaders: ['Authorization', 'X-Username', 'Content-Type'],
@@ -39,14 +40,19 @@ app.onError((err, c) => {
   }, 500);
 });
 
-// Re-integrate the original API routes
-app.route('/', seo);
+// Public login route - does not use authMiddleware
+app.route('/api/login', login);
+
+// Re-integrate the original API routes - assuming these should be protected
+app.route('/', seo); // SEO routes are typically public
+app.use('/api/*', authMiddleware); // Apply auth middleware to all /api routes except login
 app.route('/api/posts', posts);
 app.route('/api/extensions', extensions);
 app.route('/api/users', users);
 
+
 // Protected route to demonstrate streaming large JSON files from Vercel Blob Storage
-app.get('/api/data', authMiddleware, async (c) => {
+app.get('/api/data', async (c) => {
   try {
     // Replace 'large-data.json' with the actual key/name of your file in Vercel Storage
     const object = await c.env.VERCEL_STORAGE.get('large-data.json');

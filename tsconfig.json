@@ -18,6 +18,13 @@
     "jsx": "react-jsx",
     "types": ["node"]
   },
-  "include": ["./**/*.ts", "./**/*.tsx"],
-  "exclude": ["backend"]
+  "include": [
+    "App.tsx",
+    "components",
+    "services",
+    "index.tsx",
+    "constants.ts",
+    "types.ts"
+  ],
+  "exclude": ["node_modules", "backend", "dist"]
 }

@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/sitemap.xml",
+      "destination": "https://backend.extensionto.workers.dev/sitemap.xml"
+    },
+    {
+      "source": "/robots.txt",
+      "destination": "https://backend.extensionto.workers.dev/robots.txt"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}

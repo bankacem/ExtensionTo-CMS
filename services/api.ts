@@ -1,6 +1,6 @@
 import { BlogPost, Extension } from '../types';
 
-const API_URL = '/api'; // Using a relative URL for proxying
+const API_URL = 'https://backend.extensionto.workers.dev/api';
 
 const getAuthToken = () => {
     const savedAuth = localStorage.getItem('cms_auth_v4');

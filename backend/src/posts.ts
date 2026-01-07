@@ -13,6 +13,20 @@ posts.get('/', async (c) => {
   return c.json(posts)
 })
 
+posts.get('/:slug', async (c) => {
+    const slug = c.req.param('slug')
+    const dbName = getDbForSlug(slug)
+    const db = c.env[dbName] as D1Database
+    const dbs = [c.env.DB_1, c.env.DB_2, c.env.DB_3]
+    const post = await db.prepare('SELECT * FROM posts WHERE id = ?').bind(slug).first<BlogPost>()
+    if (post) {
+      post.content = await autolink(post.content, dbs)
+      return c.json(post)
+    } else {
+      return c.json({ error: 'Post not found' }, 404)
+    }
+})
+
 posts.use('/*', authMiddleware)
 
 import { autolink } from './autolinking'

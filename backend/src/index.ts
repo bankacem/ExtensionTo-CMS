@@ -9,12 +9,11 @@ import login from './login';
 
 /**
  * Type-safe bindings for Hono's context.
- * This ensures that c.env has the correct types for your secrets and bindings.
  */
 export type Bindings = {
   ADMIN_TOKEN: string;
-  ADMIN_PASSWORD: string; // Added for the login endpoint
-  VERCEL_STORAGE: R2Bucket; // Assuming you've named your Vercel Blob Storage binding 'VERCEL_STORAGE'
+  ADMIN_PASSWORD: string;
+  VERCEL_STORAGE: R2Bucket;
   DB_1: D1Database;
   DB_2: D1Database;
   DB_3: D1Database;
@@ -22,7 +21,7 @@ export type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
-// Global CORS middleware to handle pre-flight OPTIONS requests
+// Global CORS middleware
 app.use('*', cors({
   origin: 'https://extensionto.com',
   allowHeaders: ['Authorization', 'X-Username', 'Content-Type'],
@@ -40,23 +39,55 @@ app.onError((err, c) => {
   }, 500);
 });
 
-// Public login route - does not use authMiddleware
+// --- DIAGNOSTIC ROUTE ---
+// This route helps verify that environment variables and secrets are correctly bound.
+app.get('/api/debug-env', (c) => {
+  const envKeys = Object.keys(c.env);
+  const bindings: Record<string, string> = {};
+
+  for (const key of envKeys) {
+    const value = c.env[key];
+    // Determine the type of the binding for diagnostics
+    if (typeof value === 'string') {
+      bindings[key] = 'Secret (string)';
+    } else if (typeof value === 'object' && value !== null) {
+      // D1, R2, etc., are objects. We can check for a common property like `id` for D1 or `get` for R2.
+      if ('id' in value) bindings[key] = 'D1 Database';
+      else if ('get' in value) bindings[key] = 'R2 Bucket / KV Namespace';
+      else bindings[key] = 'Other Object/Service';
+    } else {
+      bindings[key] = 'Unknown Type';
+    }
+  }
+
+  return c.json({
+    message: 'Live Environment Bindings Check',
+    availableBindings: bindings,
+    expectedBindings: [
+      'ADMIN_TOKEN',
+      'ADMIN_PASSWORD',
+      'VERCEL_STORAGE',
+      'DB_1', 'DB_2', 'DB_3'
+    ]
+  });
+});
+
+// Public login route
 app.route('/api/login', login);
 
-// Re-integrate the original API routes - assuming these should be protected
-app.route('/', seo); // SEO routes are typically public
-app.use('/api/*', authMiddleware); // Apply auth middleware to all /api routes except login
+// Original API routes
+app.route('/', seo);
+
+// Apply auth middleware to all subsequent /api routes
+app.use('/api/*', authMiddleware);
 app.route('/api/posts', posts);
 app.route('/api/extensions', extensions);
 app.route('/api/users', users);
 
-
-// Protected route to demonstrate streaming large JSON files from Vercel Blob Storage
+// Protected route for streaming large JSON files
 app.get('/api/data', async (c) => {
   try {
-    // Replace 'large-data.json' with the actual key/name of your file in Vercel Storage
     const object = await c.env.VERCEL_STORAGE.get('large-data.json');
-
     if (object === null) {
       return c.json({
         type: 'https://example.com/probs/not-found',
@@ -65,23 +96,19 @@ app.get('/api/data', async (c) => {
         status: 404,
       }, 404);
     }
-
-    // Stream the response directly from Vercel Storage to the client
     c.header('Content-Type', 'application/json');
     return c.stream(async (stream) => {
       await stream.pipe(object.body);
     });
-
   } catch (err) {
     const error = err as Error;
     return c.json({
       type: 'https://example.com/probs/storage-error',
       title: 'Storage Error',
-      detail: `Failed to fetch data from Vercel Storage: ${error.message}`,
+      detail: `Failed to fetch from Vercel Storage: ${error.message}`,
       status: 500,
     }, 500);
   }
 });
-
 
 export default app;

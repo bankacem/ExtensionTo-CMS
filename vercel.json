@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/:path*",
+      "destination": "https://backend.extensionto.workers.dev/api/:path*"
+    },
+    {
       "source": "/sitemap.xml",
       "destination": "https://backend.extensionto.workers.dev/sitemap.xml"
     },

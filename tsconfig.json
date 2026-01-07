@@ -1,87 +1,23 @@
+
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "lib": ["DOM", "DOM.Iterable", "ES2022"],
-    "jsx": "react-jsx",
+    "target": "ESNext",
+    "useDefineForClassFields": true,
+    "lib": ["DOM", "DOM.Iterable", "ESNext"],
     "allowJs": false,
-    "checkJs": false,
-    "strict": true,
-    "noImplicitAny": true,
-    "strictNullChecks": true,
-    "strictFunctionTypes": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noImplicitReturns": true,
-    "noFallthroughCasesInSwitch": true,
-    "baseUrl": "./src",
-    "paths": {
-      "@/*": ["*"],
-      "@components/*": ["components/*"],
-      "@hooks/*": ["hooks/*"],
-      "@utils/*": ["utils/*"],
-      "@types/*": ["types/*"],
-      "@services/*": ["services/*"],
-      "@store/*": ["store/*"]
-    },
-    "removeComments": true,
-    "preserveConstEnums": false,
-    "sourceMap": true,
-    "declaration": false,
-    "declarationMap": false,
-    "incremental": true,
-    "tsBuildInfoFile": "./node_modules/.cache/tsbuildinfo.json",
-    "types": ["vite/client", "vitest/globals"],
-    "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "resolveJsonModule": true
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Node",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["node"]
   },
-  "include": [
-    "src/**/*",
-    "src/**/*.tsx",
-    "src/**/*.ts",
-    "src/**/*.vue",
-    "src/**/*.js",
-    "src/**/*.jsx",
-    "vite.config.ts",
-    "vitest.config.ts",
-    ".eslintrc.js",
-    "tailwind.config.js"
-  ],
-  "exclude": [
-    "backend/**/*",
-    "backend/**",
-    "server/**/*",
-    "api/**/*",
-    "functions/**/*",
-    "dist/**/*",
-    "node_modules/**/*",
-    "build/**/*",
-    ".next/**/*",
-    "coverage/**/*",
-    "*.config.js",
-    "*.config.ts",
-    "!vite.config.ts",
-    "!vitest.config.ts",
-    "public/**/*",
-    "tests/backend/**/*",
-    "**/*.test.ts",
-    "**/*.spec.ts",
-    "**/*.test.tsx",
-    "**/*.spec.tsx"
-  ],
-  "ts-node": {
-    "esm": true,
-    "experimentalSpecifierResolution": "node"
-  },
-  "vercel": {
-    "functions": {
-      "src/api/**/*.ts": {
-        "runtime": "edge"
-      }
-    }
-  }
+  "include": ["./**/*.ts", "./**/*.tsx"],
+  "exclude": ["backend"]
 }

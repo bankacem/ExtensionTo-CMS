@@ -1,22 +1,27 @@
-name = "backend"
+name = "extensionto-backend"
 main = "src/index.ts"
-compatibility_date = "2024-05-29"
+compatibility_date = "2025-01-08"
 
 [[d1_databases]]
-binding = "DB_1"
-database_name = "DB_1"
-database_id = "3c7dee75-4c33-413d-8576-607cbc22b5e6"
+binding = "DB_ACTIVE"
+database_name = "shard_1"
+database_id = "3581ec4b-c507-47ff-9d6e-23fbef1bbc99"
 
 [[d1_databases]]
-binding = "DB_2"
-database_name = "DB_2"
-database_id = "192da546-d1c6-432a-8540-ce5dea44566b"
+binding = "DB_REVIEW"
+database_name = "shard_2"
+database_id = "7beb72e1-059f-42a6-b2df-e3d8d005efc3"
 
 [[d1_databases]]
-binding = "DB_3"
-database_name = "DB_3"
-database_id = "a846d35d-4ee7-467b-ac98-ae18314df384"
+binding = "DB_ARCHIVE"
+database_name = "shard_3"
+database_id = "7548d073-ef12-4afd-a597-96111a8c3f84"
 
-[vars]
-BEARER_TOKEN = "0600231590mM@"
-USER_PASSWORD = "0600231590mM@"
+[[r2_buckets]]
+binding = "ARTICLES_BUCKET"
+bucket_name = "extensionto-articles"
+
+[env.production]
+routes = [
+  { pattern = "api.extensionto.com/*", zone_name = "extensionto.com" }
+]

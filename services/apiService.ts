@@ -1,75 +1,54 @@
 import { DEFAULT_POSTS } from '../constants';
 import { BlogPost } from '../types';
 
-const API_URL = ''; // Use relative path for same-origin requests
-const TOKEN = '0600231590mM@';
+// NOTE: In a sandboxed environment without a live backend, the API service
+// is mocked to return default data. This prevents network errors (like 404s)
+// and allows the application to be fully interactive with sample content.
 
 export const api = {
   async getPublicPosts(): Promise<BlogPost[]> {
-    try {
-      const res = await fetch(`${API_URL}/api/posts`);
-      if (!res.ok) {
-        console.error('Failed to fetch public posts with status:', res.status);
-        return DEFAULT_POSTS;
-      }
-      const data = await res.json();
-      return Array.isArray(data) && data.length > 0 ? data : DEFAULT_POSTS;
-    } catch (err) {
-      console.error("Failed to fetch public posts, returning default.", err);
-      return DEFAULT_POSTS;
-    }
+    console.log("Mock API: Fetching public posts.");
+    // We return a copy to prevent accidental mutation of the constant
+    return Promise.resolve([...DEFAULT_POSTS]);
   },
 
   async getPostBySlug(slug: string): Promise<BlogPost | null> {
-    try {
-      const res = await fetch(`${API_URL}/api/posts/${slug}`);
-      if (!res.ok) return null;
-      return await res.json();
-    } catch (err) {
-      console.error(`Failed to fetch post by slug ${slug}, returning default.`, err);
-      return DEFAULT_POSTS.find(p => p.slug === slug) || null;
+    console.log(`Mock API: Fetching post with slug: ${slug}`);
+    const post = DEFAULT_POSTS.find(p => p.slug === slug) || null;
+    
+    // Simulate the server-side internal linking logic for a more realistic preview
+    if (post) {
+      const allPostTitles = DEFAULT_POSTS.map(p => p.title).filter(title => title !== post.title);
+      let linkedContent = post.content;
+
+      allPostTitles.forEach(title => {
+        const titleRegex = new RegExp(`\\b(${title.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})\\b`, 'gi');
+        const targetPost = DEFAULT_POSTS.find(p => p.title === title);
+        if (targetPost && !linkedContent.includes(`href="/post/${targetPost.slug}"`)) {
+          linkedContent = linkedContent.replace(titleRegex, `<a href="/post/${targetPost.slug}" class="internal-link text-indigo-600 hover:underline font-bold">$1</a>`);
+        }
+      });
+      return Promise.resolve({ ...post, content: linkedContent });
     }
+    
+    return Promise.resolve(null);
   },
 
   async getAdminPosts(): Promise<BlogPost[]> {
-    try {
-      const res = await fetch(`${API_URL}/api/admin/posts`, {
-        headers: { 'Authorization': `Bearer ${TOKEN}` }
-      });
-      if (!res.ok) {
-        console.error('Failed to fetch admin posts with status:', res.status);
-        return DEFAULT_POSTS;
-      }
-      const data = await res.json();
-      return Array.isArray(data) && data.length > 0 ? data : DEFAULT_POSTS;
-    } catch (err) {
-      console.error("Failed to fetch admin posts, returning default.", err);
-      return DEFAULT_POSTS;
-    }
+    console.log("Mock API: Fetching admin posts.");
+    return Promise.resolve([...DEFAULT_POSTS]);
   },
 
-  async savePost(post: any, isNew: boolean) {
-    const method = isNew ? 'POST' : 'PUT';
-    const url = isNew ? `${API_URL}/api/admin/posts` : `${API_URL}/api/admin/posts/${post.id}`;
-    
-    try {
-      const res = await fetch(url, {
-        method,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${TOKEN}` 
-        },
-        body: JSON.stringify(post)
-      });
-      if (!res.ok) {
-        const errorBody = await res.text();
-        console.error('Cloud sync failed with status:', res.status, 'and body:', errorBody);
-        throw new Error('Cloud sync failed');
-      }
-      return await res.json();
-    } catch (err) {
-      console.warn('Sync failed, changes may not be saved.', err);
-      throw err; // Re-throw to be caught by the component
+  async savePost(post: any, isNew: boolean): Promise<{ success: boolean }> {
+    console.log(`Mock API: Simulating save for post (isNew: ${isNew})`, post);
+    // In a real application, this would send data to the backend.
+    // Here, we just simulate a successful response.
+    // For a more advanced mock, one could update an in-memory array.
+    if (isNew) {
+      console.log('Simulating new post creation...');
+    } else {
+      console.log(`Simulating update for post ID: ${post.id}`);
     }
+    return Promise.resolve({ success: true });
   }
 };

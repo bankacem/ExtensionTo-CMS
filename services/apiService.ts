@@ -1,5 +1,5 @@
-import { DEFAULT_POSTS } from '../constants.ts';
-import { BlogPost } from '../types.ts';
+import { DEFAULT_POSTS } from '../constants';
+import { BlogPost } from '../types';
 
 const API_URL = ''; // Use relative path for same-origin requests
 const TOKEN = '0600231590mM@';

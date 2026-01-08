@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { Extension, BlogPost, CMSPage } from '../types.ts';
-import { STORAGE_KEYS, DEFAULT_POSTS, DEFAULT_EXTENSIONS, DEFAULT_PAGES } from '../constants.ts';
-import { api } from '../services/apiService.ts';
+import { Extension, BlogPost, CMSPage } from '../types';
+import { STORAGE_KEYS, DEFAULT_POSTS, DEFAULT_EXTENSIONS, DEFAULT_PAGES } from '../constants';
+import { api } from '../services/apiService';
 
 interface PublicSiteProps {
   onEnterAdmin: () => void;

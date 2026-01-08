@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { AdminCMS } from './components/AdminCMS.tsx';
-import { PublicSite } from './components/PublicSite.tsx';
-import { User } from './types.ts';
-import { STORAGE_KEYS } from './constants.ts';
+import { AdminCMS } from './components/AdminCMS';
+import { PublicSite } from './components/PublicSite';
+import { User } from './types';
+import { STORAGE_KEYS } from './constants';
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);

@@ -3,12 +3,12 @@ import { LineChart, BarChart, CartesianGrid, XAxis, YAxis, Tooltip, Legend, Line
 import { 
   NoticeType, Tab, PostStatus, User, BlogPost, 
   Extension, MediaItem, CMSPage, SEOSettings
-} from '../types.ts';
+} from '../types';
 import { 
   STORAGE_KEYS, DEFAULT_USERS, DEFAULT_POSTS, DEFAULT_EXTENSIONS, DEFAULT_PAGES, DEFAULT_SEO_SETTINGS
-} from '../constants.ts';
-import { generateDraft, analyzeSEO, optimizeRobotsTxt } from '../services/geminiService.ts';
-import { api } from '../services/apiService.ts';
+} from '../constants';
+import { generateDraft, analyzeSEO, optimizeRobotsTxt } from '../services/geminiService';
+import { api } from '../services/apiService';
 
 interface AdminCMSProps {
   currentUser: User | null;

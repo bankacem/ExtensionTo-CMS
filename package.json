@@ -7,7 +7,8 @@
     "dev": "wrangler pages dev --vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler pages deploy dist"
+    "deploy": "npm run build && wrangler pages deploy dist",
+    "db:setup": "wrangler d1 execute cms-db-1 --local --file=./schema.sql && wrangler d1 execute cms-db-2 --local --file=./schema.sql && wrangler d1 execute cms-db-3 --local --file=./schema.sql"
   },
   "dependencies": {
     "@google/genai": "^1.34.0",

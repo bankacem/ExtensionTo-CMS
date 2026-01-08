@@ -81,7 +81,7 @@ async function applyInternalLinking(content: string, dbs: D1Database[], currentI
     return linkedContent;
 }
 
-// SEO: Sitemap
+// SEO: Sitemap (Served at /api/sitemap.xml)
 app.get('/sitemap.xml', async (c) => {
     const dbs = getDBs(c);
     const query = "SELECT slug, updated_at FROM articles WHERE status = 'published'";
@@ -93,13 +93,13 @@ app.get('/sitemap.xml', async (c) => {
     return c.text(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${urls}</urlset>`, 200, { 'Content-Type': 'application/xml' });
 });
 
-// SEO: Robots.txt
+// SEO: Robots.txt (Served at /api/robots.txt)
 app.get('/robots.txt', (c) => {
     return c.text("User-agent: *\nAllow: /\nSitemap: https://www.extensionto.com/sitemap.xml");
 });
 
 // PUBLIC: Fetch articles
-app.get('/api/posts', async (c) => {
+app.get('/posts', async (c) => {
     const dbs = getDBs(c);
     const query = "SELECT id, title, slug, excerpt, image, category, published_at as publishDate FROM articles WHERE status = 'published' AND published_at <= CURRENT_TIMESTAMP";
     
@@ -113,7 +113,7 @@ app.get('/api/posts', async (c) => {
 });
 
 // PUBLIC: Single post with auto-linking
-app.get('/api/posts/:slug', async (c) => {
+app.get('/posts/:slug', async (c) => {
     const slug = c.req.param('slug');
     const db = getDBForSlug(c, slug); // Direct to correct shard
     const article: any = await db.prepare("SELECT * FROM articles WHERE slug = ?").bind(slug).first();
@@ -125,13 +125,13 @@ app.get('/api/posts/:slug', async (c) => {
 });
 
 // ADMIN: Secure routes
-app.use('/api/admin/*', async (c, next) => {
+app.use('/admin/*', async (c, next) => {
     const token = c.req.header('Authorization')?.replace('Bearer ', '');
     if (token !== '0600231590mM@') return c.json({ error: 'Unauthorized' }, 401);
     await next();
 });
 
-app.get('/api/admin/posts', async (c) => {
+app.get('/admin/posts', async (c) => {
     const dbs = getDBs(c);
     const query = "SELECT *, published_at as publishDate FROM articles";
     const resultsPromises = dbs.map(db => db.prepare(query).all());
@@ -143,7 +143,7 @@ app.get('/api/admin/posts', async (c) => {
     return c.json(allPosts);
 });
 
-app.post('/api/admin/posts', async (c) => {
+app.post('/admin/posts', async (c) => {
     const body = await c.req.json();
     const { id, title, content, slug, excerpt, image, category, status, publishDate } = body;
     const db = getDBForSlug(c, slug); // Direct to correct shard
@@ -156,7 +156,7 @@ app.post('/api/admin/posts', async (c) => {
     return c.json({ success: true });
 });
 
-app.put('/api/admin/posts/:id', async (c) => {
+app.put('/admin/posts/:id', async (c) => {
     const id = c.req.param('id');
     const body = await c.req.json();
     const { title, content, slug, excerpt, image, category, status, publishDate } = body;

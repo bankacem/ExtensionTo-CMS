@@ -175,8 +175,8 @@ export const PublicSite: React.FC<PublicSiteProps> = ({ onEnterAdmin }) => {
              <span className="font-black text-slate-900 uppercase text-xs tracking-tighter">ExtensionTo © 2025</span>
           </div>
           <div className="flex gap-8 text-[9px] font-black uppercase tracking-widest text-slate-400">
-             <a href="/sitemap.xml" className="hover:text-indigo-600">Sitemap</a>
-             <a href="/robots.txt" className="hover:text-indigo-600">Robots</a>
+             <a href="/api/sitemap.xml" className="hover:text-indigo-600">Sitemap</a>
+             <a href="/api/robots.txt" className="hover:text-indigo-600">Robots</a>
              <button onClick={onEnterAdmin} className="hover:text-indigo-600">Terminal Access</button>
           </div>
         </div>

@@ -6,20 +6,12 @@ import { authMiddleware } from './middleware'
 const posts = new Hono()
 
 posts.get('/', async (c) => {
-  try {
-    const dbs = [c.env.DB_1, c.env.DB_2, c.env.DB_3];
-    if (dbs.some(db => db === undefined)) {
-      return c.json({ error: 'Database binding not found' }, 500);
-    }
-    const promises = dbs.map(db => db.prepare('SELECT id, publishDate FROM posts').all());
-    const results = await Promise.all(promises);
-    const posts = results.flatMap(result => result.results);
-    return c.json(posts);
-  } catch (e) {
-    const error = e as Error;
-    return c.json({ error: 'Failed to fetch posts', message: error.message }, 500);
-  }
-});
+  const dbs = [c.env.DB_1, c.env.DB_2, c.env.DB_3]
+  const promises = dbs.map(db => db.prepare('SELECT * FROM posts').all())
+  const results = await Promise.all(promises)
+  const posts = results.flatMap(result => result.results)
+  return c.json(posts)
+})
 
 posts.get('/:slug', async (c) => {
     const slug = c.req.param('slug')

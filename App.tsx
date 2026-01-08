@@ -1,55 +1,49 @@
 import React, { useState, useEffect } from 'react';
-import { PublicSite } from './components/PublicSite';
-import { AdminLogin } from './components/AdminLogin';
-import { AdminDashboard } from './components/AdminDashboard';
-
-type View = 'public' | 'admin';
+import { AdminCMS } from './components/AdminCMS.tsx';
+import { PublicSite } from './components/PublicSite.tsx';
+import { User } from './types.ts';
+import { STORAGE_KEYS } from './constants.ts';
 
 const App: React.FC = () => {
-  const [view, setView] = useState<View>('public');
-  const [user, setUser] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  const [isReady, setIsReady] = useState(false);
+  const [view, setView] = useState<'public' | 'admin'>('public');
 
   useEffect(() => {
-    const savedAuth = localStorage.getItem('cms_auth_v4');
+    const savedAuth = localStorage.getItem(STORAGE_KEYS.AUTH);
     if (savedAuth) {
       try {
-        const parsedUser = JSON.parse(savedAuth);
-        setUser(parsedUser);
-        setView('admin');
+        setCurrentUser(JSON.parse(savedAuth));
       } catch (e) {
-        // Invalid auth
+        console.error("Auth restoration failed", e);
       }
     }
+    setIsReady(true);
   }, []);
 
-  const handleEnterAdmin = () => {
-    if (user) {
-      setView('admin');
-    } else {
-      setView('login');
-    }
-  };
+  if (!isReady) return null;
 
-  const handleLogin = (loggedUser: any) => {
-    setUser(loggedUser);
-    setView('admin');
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('cms_auth_v4');
-    setUser(null);
-    setView('public');
-  };
-
-  if (view === 'login') {
-    return <AdminLogin onLogin={handleLogin} />;
-  }
-
-  if (view === 'admin') {
-    return <AdminDashboard onLogout={handleLogout} />;
-  }
-
-  return <PublicSite onEnterAdmin={handleEnterAdmin} />;
+  return (
+    <div className="min-h-screen">
+      {view === 'public' ? (
+        <PublicSite onEnterAdmin={() => setView('admin')} />
+      ) : (
+        <AdminCMS 
+          currentUser={currentUser} 
+          onLogin={(user) => {
+            setCurrentUser(user);
+            localStorage.setItem(STORAGE_KEYS.AUTH, JSON.stringify(user));
+          }} 
+          onLogout={() => {
+            setCurrentUser(null);
+            localStorage.removeItem(STORAGE_KEYS.AUTH);
+            setView('public');
+          }} 
+          onViewSite={() => setView('public')}
+        />
+      )}
+    </div>
+  );
 };
 
 export default App;

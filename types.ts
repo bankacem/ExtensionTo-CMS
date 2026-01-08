@@ -1,11 +1,11 @@
-
 export type NoticeType = 'success' | 'error' | 'info';
-export type Tab = 'dashboard' | 'posts' | 'extensions' | 'media' | 'analytics' | 'settings' | 'scheduler';
+export type Tab = 'dashboard' | 'posts' | 'pages' | 'extensions' | 'media' | 'analytics' | 'settings' | 'scheduler' | 'seo';
 export type PostStatus = 'draft' | 'published' | 'scheduled' | 'archived';
 export type UserRole = 'admin' | 'editor' | 'viewer';
 
 export interface BlogPost {
   id: string;
+  slug: string;
   title: string;
   excerpt: string;
   content: string;
@@ -24,8 +24,18 @@ export interface BlogPost {
   wordCount?: number;
   readingTime?: number;
   seoScore?: number;
+  seoSuggestions?: string[];
   internalLinks?: string[];
   views?: number;
+}
+
+export interface CMSPage {
+  id: string;
+  title: string;
+  slug: string;
+  content: string;
+  status: 'published' | 'draft';
+  updatedAt: string;
 }
 
 export interface Extension {
@@ -37,6 +47,7 @@ export interface Extension {
   downloads: number;
   icon?: string;
   storeUrl?: string;
+  featured?: boolean;
 }
 
 export interface MediaItem {
@@ -45,6 +56,13 @@ export interface MediaItem {
   data: string;
   type: string;
   uploadDate: string;
+}
+
+export interface SEOSettings {
+  robotsTxt: string;
+  sitemapLastGenerated: string;
+  googleSearchConsoleKey?: string;
+  bingWebmasterKey?: string;
 }
 
 export interface ScheduledPost {
@@ -73,11 +91,4 @@ export interface User {
   role: UserRole;
   createdAt: string;
   avatar?: string;
-  token?: string;
-}
-
-export interface GithubSyncInfo {
-  lastSync: string;
-  status: 'synced' | 'error' | 'idle';
-  sha?: string;
 }

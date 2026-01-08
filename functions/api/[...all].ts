@@ -28,7 +28,10 @@ const app = new Hono<{ Bindings: Bindings }>();
 const allowedOrigins = [
   'https://www.extensionto.com',
   'https://extensionto.com',
-  'http://localhost:3000'
+  'http://localhost:3000', // Vite dev server
+  'http://localhost:8787', // Wrangler dev server
+  'http://localhost:8788', // Wrangler pages dev server
+  'http://127.0.0.1:8788', // Alternative for localhost
 ];
 
 app.use('*', cors({

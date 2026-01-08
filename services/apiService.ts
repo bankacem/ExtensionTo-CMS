@@ -1,14 +1,17 @@
 import { DEFAULT_POSTS } from '../constants.ts';
 import { BlogPost } from '../types.ts';
 
-const API_URL = 'https://backend.extensionto.workers.dev'; 
+const API_URL = ''; // Use relative path for same-origin requests
 const TOKEN = '0600231590mM@';
 
 export const api = {
   async getPublicPosts(): Promise<BlogPost[]> {
     try {
       const res = await fetch(`${API_URL}/api/posts`);
-      if (!res.ok) return DEFAULT_POSTS;
+      if (!res.ok) {
+        console.error('Failed to fetch public posts with status:', res.status);
+        return DEFAULT_POSTS;
+      }
       const data = await res.json();
       return Array.isArray(data) && data.length > 0 ? data : DEFAULT_POSTS;
     } catch (err) {
@@ -33,7 +36,10 @@ export const api = {
       const res = await fetch(`${API_URL}/api/admin/posts`, {
         headers: { 'Authorization': `Bearer ${TOKEN}` }
       });
-      if (!res.ok) return DEFAULT_POSTS;
+      if (!res.ok) {
+        console.error('Failed to fetch admin posts with status:', res.status);
+        return DEFAULT_POSTS;
+      }
       const data = await res.json();
       return Array.isArray(data) && data.length > 0 ? data : DEFAULT_POSTS;
     } catch (err) {

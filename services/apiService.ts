@@ -21,7 +21,7 @@ const handleResponse = async (response: Response) => {
 export const api = {
   async getPublicPosts(): Promise<BlogPost[]> {
     const response = await fetch('/api/posts');
-    return handleResponse(response);
+    return (await handleResponse(response)) as BlogPost[];
   },
 
   async getPostBySlug(slug: string): Promise<BlogPost | null> {
@@ -29,7 +29,7 @@ export const api = {
     if (response.status === 404) {
       return null;
     }
-    return handleResponse(response);
+    return (await handleResponse(response)) as BlogPost;
   },
 
   async getAdminPosts(): Promise<BlogPost[]> {
@@ -38,7 +38,7 @@ export const api = {
         'Authorization': `Bearer ${ADMIN_TOKEN}`
       }
     });
-    return handleResponse(response);
+    return (await handleResponse(response)) as BlogPost[];
   },
 
   async savePost(post: any, isNew: boolean): Promise<{ success: boolean }> {
@@ -53,6 +53,6 @@ export const api = {
       },
       body: JSON.stringify(post),
     });
-    return handleResponse(response);
+    return (await handleResponse(response)) as { success: boolean };
   }
 };

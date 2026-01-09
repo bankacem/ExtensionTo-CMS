@@ -3,20 +3,20 @@ pages_build_output_dir = "dist"
 
 [[d1_databases]]
 binding = "DB_1"
-database_name = "cms-db-1"
-database_id = "a8f5-4a7b-8e3c-2e6d1b0f9c7d"
+database_name = "shard_1"
+database_id = "3581ec4b-c507-47ff-9d6e-23fbef1bbc99"
 preview_database_id = "local-db-1"
 
 [[d1_databases]]
 binding = "DB_2"
-database_name = "cms-db-2"
-database_id = "b9f6-5b8c-9f4d-3f7e2c1a0d8e"
+database_name = "shard_2"
+database_id = "7beb72e1-059f-42a6-b2df-e3d8d005efc3"
 preview_database_id = "local-db-2"
 
 [[d1_databases]]
 binding = "DB_3"
-database_name = "cms-db-3"
-database_id = "c0g7-6c9d-0g5e-4g8f3d2b1e9f"
+database_name = "shard_3"
+database_id = "7548d073-ef12-4afd-a597-96111a8c3f84"
 preview_database_id = "local-db-3"
 
 [vars]

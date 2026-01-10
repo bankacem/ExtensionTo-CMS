@@ -130,46 +130,77 @@ app.get('/posts/:slug', async (c) => {
 // ADMIN: Secure routes
 app.use('/admin/*', async (c, next) => {
     const token = c.req.header('Authorization')?.replace('Bearer ', '');
-    if (token !== '0600231590mM@') return c.json({ error: 'Unauthorized' }, 401);
+    if (token !== c.env.ADMIN_TOKEN) {
+        return c.json({ error: 'Unauthorized' }, 401);
+    }
     await next();
 });
 
 app.get('/admin/posts', async (c) => {
-    const dbs = getDBs(c);
-    const query = "SELECT *, published_at as publishDate FROM articles";
-    const resultsPromises = dbs.map(db => db.prepare(query).all());
-    const allResults = await Promise.all(resultsPromises);
-    const allPosts = allResults.flatMap(res => res.results);
+    try {
+        const dbs = getDBs(c);
+        const query = "SELECT *, published_at as publishDate FROM articles";
+        const resultsPromises = dbs.map(db => db.prepare(query).all());
+        const allResults = await Promise.all(resultsPromises);
+        const allPosts = allResults.flatMap(res => res.results);
 
-    allPosts.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-    
-    return c.json(allPosts);
+        allPosts.sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+        return c.json(allPosts);
+    } catch (e: any) {
+        return c.json({ error: 'Failed to fetch posts', details: e.message }, 500);
+    }
 });
 
 app.post('/admin/posts', async (c) => {
-    const body = await c.req.json();
-    const { id, title, content, slug, excerpt, image, category, status, publishDate } = body;
-    const db = getDBForSlug(c, slug); // Direct to correct shard
-    const published_at = publishDate || new Date().toISOString();
+    try {
+        const body = await c.req.json();
+        const { id, title, content, slug, excerpt, image, category, status, publishDate } = body;
 
-    await db.prepare(
-        "INSERT INTO articles (id, title, content, slug, excerpt, image, category, status, published_at) VALUES (?,?,?,?,?,?,?,?,?)"
-    ).bind(id || crypto.randomUUID(), title, content, slug, excerpt, image, category, status, published_at).run();
-    
-    return c.json({ success: true });
+        if (!title || !slug) {
+            return c.json({ error: 'Title and slug are required' }, 400);
+        }
+
+        const db = getDBForSlug(c, slug);
+        const published_at = publishDate || new Date().toISOString();
+
+        await db.prepare(
+            "INSERT INTO articles (id, title, content, slug, excerpt, image, category, status, published_at) VALUES (?,?,?,?,?,?,?,?,?)"
+        ).bind(id || crypto.randomUUID(), title, content, slug, excerpt, image, category, status, published_at).run();
+
+        return c.json({ success: true }, 201);
+    } catch (e: any) {
+        // Check for unique constraint violation
+        if (e.message?.includes('UNIQUE constraint failed')) {
+            return c.json({ error: 'A post with this slug already exists.' }, 409);
+        }
+        return c.json({ error: 'Failed to create post', details: e.message }, 500);
+    }
 });
 
 app.put('/admin/posts/:id', async (c) => {
-    const id = c.req.param('id');
-    const body = await c.req.json();
-    const { title, content, slug, excerpt, image, category, status, publishDate } = body;
-    const db = getDBForSlug(c, slug); // Direct to correct shard (assumes slug is immutable)
+    try {
+        const id = c.req.param('id');
+        const body = await c.req.json();
+        const { title, content, slug, excerpt, image, category, status, publishDate } = body;
 
-    await db.prepare(
-        "UPDATE articles SET title=?, content=?, slug=?, excerpt=?, image=?, category=?, status=?, published_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?"
-    ).bind(title, content, slug, excerpt, image, category, status, publishDate, id).run();
+        if (!title || !slug) {
+            return c.json({ error: 'Title and slug are required' }, 400);
+        }
 
-    return c.json({ success: true });
+        const db = getDBForSlug(c, slug);
+
+        await db.prepare(
+            "UPDATE articles SET title=?, content=?, slug=?, excerpt=?, image=?, category=?, status=?, published_at=?, updated_at=CURRENT_TIMESTAMP WHERE id=?"
+        ).bind(title, content, slug, excerpt, image, category, status, publishDate, id).run();
+
+        return c.json({ success: true });
+    } catch (e: any) {
+        if (e.message?.includes('UNIQUE constraint failed')) {
+            return c.json({ error: 'A post with this slug already exists.' }, 409);
+        }
+        return c.json({ error: 'Failed to update post', details: e.message }, 500);
+    }
 });
 
 // This is the standard export for Cloudflare Pages Functions.

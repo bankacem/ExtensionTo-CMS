@@ -1,27 +1,29 @@
 import { BlogPost } from '../types';
 
-// In a real-world production app, this token should come from a secure auth flow (e.g., login response).
-// For this application, it matches the hardcoded value in the backend worker.
-const ADMIN_TOKEN = '0600231590mM@';
+// The admin token is retrieved from local storage for security.
+// It should be set by the user through a secure admin interface.
+const getAdminToken = (): string => {
+  // Ensure this code only runs on the client-side
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('ADMIN_TOKEN') || '';
+  }
+  return '';
+};
 
-const handleResponse = async (response: Response) => {
+const handleResponse = async <T>(response: Response): Promise<T> => {
   if (!response.ok) {
     const errorText = await response.text();
     console.error(`API Error: ${response.status} ${response.statusText}`, errorText);
     throw new Error(`Failed to fetch with status: ${response.status}`);
   }
-  // Handle cases where the response might be empty (e.g., a 204 No Content)
-  const contentType = response.headers.get("content-type");
-  if (contentType && contentType.indexOf("application/json") !== -1) {
-    return response.json();
-  }
-  return {};
+  // All successful responses are expected to be JSON.
+  return response.json();
 };
 
 export const api = {
   async getPublicPosts(): Promise<BlogPost[]> {
     const response = await fetch('/api/posts');
-    return handleResponse(response);
+    return handleResponse<BlogPost[]>(response);
   },
 
   async getPostBySlug(slug: string): Promise<BlogPost | null> {
@@ -29,16 +31,16 @@ export const api = {
     if (response.status === 404) {
       return null;
     }
-    return handleResponse(response);
+    return handleResponse<BlogPost>(response);
   },
 
   async getAdminPosts(): Promise<BlogPost[]> {
     const response = await fetch('/api/admin/posts', {
       headers: {
-        'Authorization': `Bearer ${ADMIN_TOKEN}`
+        'Authorization': `Bearer ${getAdminToken()}`
       }
     });
-    return handleResponse(response);
+    return handleResponse<BlogPost[]>(response);
   },
 
   async savePost(post: any, isNew: boolean): Promise<{ success: boolean }> {
@@ -49,10 +51,10 @@ export const api = {
       method: method,
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${ADMIN_TOKEN}`
+        'Authorization': `Bearer ${getAdminToken()}`
       },
       body: JSON.stringify(post),
     });
-    return handleResponse(response);
+    return handleResponse<{ success: boolean }>(response);
   }
 };
